@@ -1,29 +1,40 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, ActivityIndicator, TextInput, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, ActivityIndicator, TextInput, ScrollView, SafeAreaView } from 'react-native';
 import NfcManager, { NfcTech, Ndef } from 'react-native-nfc-manager';
 
 // NFC Donanım katmanını ayağa kaldırıyoruz
 NfcManager.start();
 
+const COLORS = {
+  background: '#f8f9ff',
+  surface: '#ffffff',
+  surfaceVariant: '#d3e4fe',
+  surfaceContainerLowest: '#ffffff',
+  onSurface: '#0b1c30',
+  onSurfaceVariant: '#434655',
+  primary: '#004ac6',
+  onPrimary: '#ffffff',
+  primaryContainer: '#2563eb',
+  onPrimaryContainer: '#eeefff',
+  outlineVariant: '#c3c6d7',
+  error: '#ba1a1a',
+};
+
 export default function App() {
+  // --- ORİJİNAL STATE'LER ---
   const [loading, setLoading] = useState(false);
-  const [cardId, setCardId] = useState('Kart bekleniyor...');
-  
-  // Mod Yönetimi: 'NONE', 'WEBSITE', 'CONTACT', 'BLUETOOTH'
+  const [cardId, setCardId] = useState('Tarama için bekleniyor...');
   const [writeMode, setWriteMode] = useState('NONE'); 
-
-  // Web Sitesi Modu Durumu
   const [url, setUrl] = useState('https://google.com');
-
-  // Kişi Bilgisi (Contact) Modu Durumları
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-
-  // Bluetooth Modu Durumları
   const [macAddress, setMacAddress] = useState('');
 
-  // --- KART OKUMA MEKANİZMASI ---
+  // --- YENİ UI STATE'İ (Alt Menü İçin) ---
+  const [activeTab, setActiveTab] = useState('READ'); // 'READ' veya 'WRITE'
+
+  // --- KART OKUMA MEKANİZMASI (DEĞİŞTİRİLMEDİ) ---
   async function startNfcScan() {
     try {
       setLoading(true);
@@ -41,7 +52,7 @@ export default function App() {
     }
   }
 
-  // --- KARTA NDEF VERİSİ YAZMA MEKANİZMASI ---
+  // --- KARTA NDEF VERİSİ YAZMA MEKANİZMASI (DEĞİŞTİRİLMEDİ) ---
   async function writeNfcData() {
     let bytes = null;
 
@@ -78,11 +89,7 @@ export default function App() {
         }
         await NfcManager.requestTechnology([NfcTech.Ndef]);
         
-        // MAC adresini işleme: Parçala, hex formattan integer'a çevir,
-        // Little-Endian (ters sıralama) zorunluluğu nedeniyle diziyi tersine çevir.
         const macBytes = macAddress.split(':').reverse().map(hex => parseInt(hex, 16));
-        
-        // Payload yapısı: Uzunluk (0x08, 0x00 = Toplam 8 byte) + 6 byte MAC adresi
         const payload = [0x08, 0x00, ...macBytes];
         
         bytes = Ndef.encodeMessage([
@@ -106,103 +113,190 @@ export default function App() {
     }
   }
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>NFC Tools Studio</Text>
-      
-      <View style={styles.cardBox}>
-        <Text style={styles.label}>Durum / Okunan ID:</Text>
-        <Text style={styles.uidText}>{cardId}</Text>
+  // --- RENDER YARDIMCILARI ---
+  const renderHeader = (title) => (
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>{title}</Text>
+    </View>
+  );
+
+  const renderReadTab = () => (
+    <View style={styles.tabContainer}>
+      {renderHeader('NFC Oku')}
+      <View style={styles.readContent}>
+        <View style={styles.nfcIconPlaceholder}>
+          <Text style={{ fontSize: 64 }}>📡</Text>
+        </View>
+        <Text style={styles.descriptionText}>
+          Yakındaki bir NFC etiketini taramak için butona dokunun.
+        </Text>
+        
+        <TouchableOpacity style={styles.primaryButton} onPress={startNfcScan} disabled={loading}>
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Kart Oku</Text>}
+        </TouchableOpacity>
+
+        <View style={styles.statusCard}>
+          <Text style={styles.statusLabel}>DURUM / UID</Text>
+          <Text style={styles.statusValue}>{cardId}</Text>
+        </View>
       </View>
+    </View>
+  );
 
-      {/* --- ANA SEÇİM MENÜSÜ --- */}
-      {writeMode === 'NONE' && (
-        <View style={styles.fullWidth}>
-          <TouchableOpacity style={[styles.button, styles.readButton]} onPress={startNfcScan} disabled={loading}>
-            <Text style={styles.buttonText}>SADECE KART OKU</Text>
+  const renderWriteOptions = () => (
+    <View style={styles.tabContainer}>
+      {renderHeader('NFC Yaz')}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.descriptionText}>
+          Boş bir etikete veya yeniden yazılabilir bir NFC çipine kaydetmek istediğiniz veri tipini seçin.
+        </Text>
+
+        <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('WEBSITE')}>
+          <View style={styles.optionTextContainer}>
+            <Text style={styles.optionTitle}>🌐 Web Sitesi</Text>
+            <Text style={styles.optionDesc}>Bir URL veya web bağlantısını kodlayın.</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('CONTACT')}>
+          <View style={styles.optionTextContainer}>
+            <Text style={styles.optionTitle}>👤 Kişi Kartı</Text>
+            <Text style={styles.optionDesc}>VCard bilgilerini aktarın. Rehbere ekleme imkanı sağlar.</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('BLUETOOTH')}>
+          <View style={styles.optionTextContainer}>
+            <Text style={styles.optionTitle}>🎧 Bluetooth</Text>
+            <Text style={styles.optionDesc}>Eşleşme bilgilerini yazın. Kulaklıkları hızlıca bağlar.</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
+  );
+
+  const renderWriteForm = () => {
+    return (
+      <View style={styles.tabContainer}>
+        {renderHeader('Veri Girişi')}
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          
+          <View style={styles.statusCard}>
+            <Text style={styles.statusLabel}>DURUM</Text>
+            <Text style={styles.statusValue}>{cardId}</Text>
+          </View>
+
+          {writeMode === 'WEBSITE' && (
+            <View>
+              <Text style={styles.inputLabel}>Web Sitesi Linki</Text>
+              <TextInput style={styles.input} onChangeText={setUrl} value={url} placeholder="https://example.com" placeholderTextColor={COLORS.onSurfaceVariant} autoCapitalize="none" />
+            </View>
+          )}
+
+          {writeMode === 'CONTACT' && (
+            <View>
+              <Text style={styles.inputLabel}>Ad Soyad</Text>
+              <TextInput style={styles.input} onChangeText={setName} value={name} placeholder="John Doe" placeholderTextColor={COLORS.onSurfaceVariant} />
+              <Text style={styles.inputLabel}>Telefon Numarası</Text>
+              <TextInput style={styles.input} onChangeText={setPhone} value={phone} placeholder="+90 555 555 5555" keyboardType="phone-pad" placeholderTextColor={COLORS.onSurfaceVariant} />
+              <Text style={styles.inputLabel}>E-posta Adresi</Text>
+              <TextInput style={styles.input} onChangeText={setEmail} value={email} placeholder="ornek@mail.com" keyboardType="email-address" placeholderTextColor={COLORS.onSurfaceVariant} autoCapitalize="none" />
+            </View>
+          )}
+
+          {writeMode === 'BLUETOOTH' && (
+            <View>
+              <Text style={styles.inputLabel}>MAC Adresi</Text>
+              <TextInput style={styles.input} onChangeText={setMacAddress} value={macAddress} placeholder="A1:B2:C3:D4:E5:F6" placeholderTextColor={COLORS.onSurfaceVariant} autoCapitalize="characters" />
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.primaryButton} onPress={writeNfcData} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Karta Yaz</Text>}
           </TouchableOpacity>
 
-          <View style={styles.divider} />
-          <Text style={styles.sectionTitle}>Yazma Modu Seçin:</Text>
-
-          <TouchableOpacity style={[styles.button, styles.writeButton]} onPress={() => setWriteMode('WEBSITE')}>
-            <Text style={styles.buttonText}>🌐 WEB SİTESİ YAZ</Text>
+          <TouchableOpacity style={styles.ghostButton} onPress={() => setWriteMode('NONE')} disabled={loading}>
+            <Text style={styles.ghostButtonText}>İptal ve Geri Dön</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.button, styles.contactButton]} onPress={() => setWriteMode('CONTACT')}>
-            <Text style={styles.buttonText}>👤 KİŞİ KARTI (CONTACT) YAZ</Text>
-          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  };
 
-          <TouchableOpacity style={[styles.button, styles.bluetoothButton]} onPress={() => setWriteMode('BLUETOOTH')}>
-            <Text style={styles.buttonText}>🎧 BLUETOOTH EŞLEŞTİRME YAZ</Text>
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        
+        {/* İçerik Alanı */}
+        <View style={styles.contentArea}>
+          {activeTab === 'READ' ? renderReadTab() : 
+            (writeMode === 'NONE' ? renderWriteOptions() : renderWriteForm())}
+        </View>
+
+        {/* Alt Navigasyon (Bottom Nav) */}
+        <View style={styles.bottomNav}>
+          <TouchableOpacity 
+            style={[styles.navItem, activeTab === 'READ' && styles.navItemActive]} 
+            onPress={() => { setActiveTab('READ'); setWriteMode('NONE'); }}>
+            <Text style={[styles.navIcon, activeTab === 'READ' && styles.navIconActive]}>📡</Text>
+            <Text style={[styles.navText, activeTab === 'READ' && styles.navTextActive]}>Oku</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.navItem, activeTab === 'WRITE' && styles.navItemActive]} 
+            onPress={() => { setActiveTab('WRITE'); }}>
+            <Text style={[styles.navIcon, activeTab === 'WRITE' && styles.navIconActive]}>✍️</Text>
+            <Text style={[styles.navText, activeTab === 'WRITE' && styles.navTextActive]}>Yaz</Text>
           </TouchableOpacity>
         </View>
-      )}
 
-      {/* --- WEB SİTESİ INPUT EKRANI --- */}
-      {writeMode === 'WEBSITE' && (
-        <View style={styles.fullWidth}>
-          <Text style={styles.sectionTitle}>Web Sitesi Linkini Girin:</Text>
-          <TextInput style={styles.input} onChangeText={setUrl} value={url} placeholder="https://example.com" placeholderTextColor="#666" />
-          <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={writeNfcData} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>KARTA YAZMA MODUNU AÇ</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelButton} onPress={() => setWriteMode('NONE')}>
-            <Text style={styles.cancelText}>Geri Dön</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* --- KİŞİ KARTI INPUT EKRANI --- */}
-      {writeMode === 'CONTACT' && (
-        <View style={styles.fullWidth}>
-          <Text style={styles.sectionTitle}>Kişi Bilgilerini Doldurun:</Text>
-          <TextInput style={styles.input} onChangeText={setName} value={name} placeholder="Ad Soyad" placeholderTextColor="#666" />
-          <TextInput style={styles.input} onChangeText={setPhone} value={phone} placeholder="Telefon Numarası" keyboardType="phone-pad" placeholderTextColor="#666" />
-          <TextInput style={styles.input} onChangeText={setEmail} value={email} placeholder="E-posta Adresi" keyboardType="email-address" placeholderTextColor="#666" />
-          <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={writeNfcData} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>KARTA KİŞİYİ YAZ</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelButton} onPress={() => setWriteMode('NONE')}>
-            <Text style={styles.cancelText}>Geri Dön</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* --- BLUETOOTH INPUT EKRANI --- */}
-      {writeMode === 'BLUETOOTH' && (
-        <View style={styles.fullWidth}>
-          <Text style={styles.sectionTitle}>Cihazın MAC Adresini Girin:</Text>
-          <TextInput style={styles.input} onChangeText={setMacAddress} value={macAddress} placeholder="Örn: A1:B2:C3:D4:E5:F6" placeholderTextColor="#666" autoCapitalize="characters" />
-          <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={writeNfcData} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>KARTA BLUETOOTH YAZ</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelButton} onPress={() => setWriteMode('NONE')}>
-            <Text style={styles.cancelText}>Geri Dön</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1e1e24', padding: 20 },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#fff', marginBottom: 25 },
-  fullWidth: { width: '100%' },
-  cardBox: { backgroundColor: '#2a2a35', padding: 15, borderRadius: 12, width: '100%', alignItems: 'center', marginBottom: 25, borderLeftWidth: 5, borderLeftColor: '#007AFF' },
-  label: { color: '#aaa', fontSize: 13, marginBottom: 5 },
-  uidText: { color: '#00ffcc', fontSize: 16, fontWeight: 'mono', textAlign: 'center' },
-  sectionTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 15, textAlign: 'left' },
-  divider: { height: 1, backgroundColor: '#444', width: '100%', marginVertical: 20 },
-  input: { backgroundColor: '#2a2a35', color: '#fff', width: '100%', padding: 12, borderRadius: 8, marginBottom: 12, fontSize: 15, borderWidth: 1, borderColor: '#444' },
-  button: { width: '100%', paddingVertical: 14, borderRadius: 30, elevation: 3, alignItems: 'center', marginBottom: 12 },
-  readButton: { backgroundColor: '#34c759' },
-  writeButton: { backgroundColor: '#007AFF' },
-  contactButton: { backgroundColor: '#af52de' },
-  bluetoothButton: { backgroundColor: '#2a9d8f' },
-  saveButton: { backgroundColor: '#ff9500', marginTop: 10 },
-  buttonText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
-  cancelButton: { width: '100%', alignItems: 'center', marginTop: 15 },
-  cancelText: { color: '#ff3b30', fontSize: 15, fontWeight: 'bold' }
+  safeArea: { flex: 1, backgroundColor: COLORS.surface },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  contentArea: { flex: 1 },
+  tabContainer: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 40 },
+  
+  header: { height: 56, justifyContent: 'center', paddingHorizontal: 16, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.outlineVariant },
+  headerTitle: { fontSize: 22, fontWeight: '600', color: COLORS.primary },
+  
+  readContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  nfcIconPlaceholder: { width: 140, height: 140, borderRadius: 70, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.outlineVariant, alignItems: 'center', justifyContent: 'center', marginBottom: 32 },
+  descriptionText: { fontSize: 16, color: COLORS.onSurfaceVariant, textAlign: 'center', marginBottom: 24, lineHeight: 24 },
+  
+  primaryButton: { width: '100%', backgroundColor: COLORS.primary, paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4, marginTop: 8 },
+  primaryButtonText: { color: COLORS.onPrimary, fontSize: 18, fontWeight: '600' },
+  
+  ghostButton: { width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+  ghostButtonText: { color: COLORS.onSurfaceVariant, fontSize: 16, fontWeight: '600' },
+
+  statusCard: { width: '100%', backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.outlineVariant, borderRadius: 12, padding: 16, marginTop: 32, flexDirection: 'column' },
+  statusLabel: { fontSize: 12, fontWeight: '500', color: COLORS.onSurfaceVariant, marginBottom: 4 },
+  statusValue: { fontSize: 14, fontWeight: '600', color: COLORS.onSurface },
+
+  optionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surfaceContainerLowest, borderWidth: 1, borderColor: COLORS.outlineVariant, borderRadius: 16, padding: 20, marginBottom: 16 },
+  optionTextContainer: { flex: 1 },
+  optionTitle: { fontSize: 18, fontWeight: '600', color: COLORS.onSurface, marginBottom: 4 },
+  optionDesc: { fontSize: 14, color: COLORS.onSurfaceVariant, lineHeight: 20 },
+  chevron: { fontSize: 24, color: COLORS.primary, paddingLeft: 16 },
+
+  inputLabel: { fontSize: 14, fontWeight: '500', color: COLORS.onSurfaceVariant, marginBottom: 8, marginTop: 16 },
+  input: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.outlineVariant, borderRadius: 8, padding: 16, fontSize: 16, color: COLORS.onSurface },
+
+  bottomNav: { flexDirection: 'row', backgroundColor: COLORS.surfaceContainerLowest, borderTopWidth: 1, borderTopColor: COLORS.outlineVariant, paddingVertical: 8, paddingBottom: 16 },
+  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginHorizontal: 16, borderRadius: 12 },
+  navItemActive: { backgroundColor: COLORS.surfaceVariant },
+  navIcon: { fontSize: 24, opacity: 0.6 },
+  navIconActive: { opacity: 1 },
+  navText: { fontSize: 12, fontWeight: '500', color: COLORS.onSurfaceVariant, marginTop: 4 },
+  navTextActive: { color: COLORS.primary, fontWeight: '700' },
 });
