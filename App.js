@@ -9,7 +9,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [cardId, setCardId] = useState('Kart bekleniyor...');
   
-  // Mod Yönetimi: 'NONE' (Seçim), 'WEBSITE' (Web Giriş), 'CONTACT' (Kişi Giriş)
+  // Mod Yönetimi: 'NONE', 'WEBSITE', 'CONTACT', 'WIFI', 'BLUETOOTH'
   const [writeMode, setWriteMode] = useState('NONE'); 
 
   // Web Sitesi Modu Durumu
@@ -19,6 +19,13 @@ export default function App() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+
+  // Wi-Fi Modu Durumları
+  const [ssid, setSsid] = useState('');
+  const [wifiPassword, setWifiPassword] = useState('');
+
+  // Bluetooth Modu Durumları
+  const [macAddress, setMacAddress] = useState('');
 
   // --- KART OKUMA MEKANİZMASI ---
   async function startNfcScan() {
@@ -46,7 +53,6 @@ export default function App() {
       setLoading(true);
       setCardId('Yazma modunda, kartı yaklaştırın...');
 
-      // Hangi mod seçildiyse ona göre veriyi NDEF formatında byte dizisine çeviriyoruz
       if (writeMode === 'WEBSITE') {
         if (!url) { 
           Alert.alert('Hata', 'Link alanı boş bırakılamaz!'); 
@@ -62,22 +68,49 @@ export default function App() {
           setLoading(false); 
           return; 
         }
-
-        // vCard Yapısını Oluşturuyoruz (Uluslararası Rehber Standartı)
         const vCardData = `BEGIN:VCARD\nVERSION:3.0\nN:;${name};;;\nFN:${name}\nTEL;CELL:${phone}\nEMAIL:${email}\nEND:VCARD`;
-        
         await NfcManager.requestTechnology([NfcTech.Ndef]);
         bytes = Ndef.encodeMessage([
           Ndef.mimeMediaRecord('text/vcard', vCardData)
         ]);
+
+      } else if (writeMode === 'WIFI') {
+        if (!ssid) {
+          Alert.alert('Hata', 'Wi-Fi ağ adı (SSID) zorunludur!');
+          setLoading(false);
+          return;
+        }
+        await NfcManager.requestTechnology([NfcTech.Ndef]);
+        // Wi-Fi konfigürasyonunu kütüphanenin native fonksiyonu ile oluşturuyoruz
+        bytes = Ndef.encodeMessage([
+          Ndef.wifiSimpleConnectionRecord(ssid, wifiPassword)
+        ]);
+
+      } else if (writeMode === 'BLUETOOTH') {
+        if (!macAddress || !macAddress.includes(':')) {
+          Alert.alert('Hata', 'Geçerli bir MAC adresi girin (örn: 00:11:22:33:44:55)');
+          setLoading(false);
+          return;
+        }
+        await NfcManager.requestTechnology([NfcTech.Ndef]);
+        
+        // MAC adresini işleme: Parçala, hex formattan integer'a çevir,
+        // Little-Endian (ters sıralama) zorunluluğu nedeniyle diziyi tersine çevir.
+        const macBytes = macAddress.split(':').reverse().map(hex => parseInt(hex, 16));
+        
+        // Payload yapısı: Uzunluk (0x08, 0x00 = Toplam 8 byte) + 6 byte MAC adresi
+        const payload = [0x08, 0x00, ...macBytes];
+        
+        bytes = Ndef.encodeMessage([
+          Ndef.mimeMediaRecord('application/vnd.bluetooth.ep.oob', payload)
+        ]);
       }
 
-      // Veri başarıyla byte formatına döndüyse donanıma yazma emri veriyoruz
       if (bytes) {
         await NfcManager.ndefHandler.writeNdefMessage(bytes);
         Alert.alert('Başarılı!', 'Veri karta başarıyla işlendi kanka!');
         setCardId('Yazma Başarılı!');
-        setWriteMode('NONE'); // İşlem bitince ana menüye dön
+        setWriteMode('NONE'); 
       }
     } catch (ex) {
       console.warn("NFC Yazma Hatası:", ex);
@@ -115,6 +148,15 @@ export default function App() {
           <TouchableOpacity style={[styles.button, styles.contactButton]} onPress={() => setWriteMode('CONTACT')}>
             <Text style={styles.buttonText}>👤 KİŞİ KARTI (CONTACT) YAZ</Text>
           </TouchableOpacity>
+
+          {/* YENİ MODLAR: WİFİ ve BLUETOOTH */}
+          <TouchableOpacity style={[styles.button, styles.wifiButton]} onPress={() => setWriteMode('WIFI')}>
+            <Text style={styles.buttonText}>📶 WİFİ AĞI YAZ</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.button, styles.bluetoothButton]} onPress={() => setWriteMode('BLUETOOTH')}>
+            <Text style={styles.buttonText}>🎧 BLUETOOTH EŞLEŞTİRME YAZ</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -122,13 +164,7 @@ export default function App() {
       {writeMode === 'WEBSITE' && (
         <View style={styles.fullWidth}>
           <Text style={styles.sectionTitle}>Web Sitesi Linkini Girin:</Text>
-          <TextInput
-            style={styles.input}
-            onChangeText={setUrl}
-            value={url}
-            placeholder="https://example.com"
-            placeholderTextColor="#666"
-          />
+          <TextInput style={styles.input} onChangeText={setUrl} value={url} placeholder="https://example.com" placeholderTextColor="#666" />
           <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={writeNfcData} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>KARTA YAZMA MODUNU AÇ</Text>}
           </TouchableOpacity>
@@ -142,13 +178,40 @@ export default function App() {
       {writeMode === 'CONTACT' && (
         <View style={styles.fullWidth}>
           <Text style={styles.sectionTitle}>Kişi Bilgilerini Doldurun:</Text>
-          
           <TextInput style={styles.input} onChangeText={setName} value={name} placeholder="Ad Soyad" placeholderTextColor="#666" />
           <TextInput style={styles.input} onChangeText={setPhone} value={phone} placeholder="Telefon Numarası" keyboardType="phone-pad" placeholderTextColor="#666" />
           <TextInput style={styles.input} onChangeText={setEmail} value={email} placeholder="E-posta Adresi" keyboardType="email-address" placeholderTextColor="#666" />
-
           <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={writeNfcData} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>KARTA KİŞİYİ YAZ</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cancelButton} onPress={() => setWriteMode('NONE')}>
+            <Text style={styles.cancelText}>Geri Dön</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* --- WİFİ INPUT EKRANI --- */}
+      {writeMode === 'WIFI' && (
+        <View style={styles.fullWidth}>
+          <Text style={styles.sectionTitle}>Wi-Fi Bilgilerini Doldurun:</Text>
+          <TextInput style={styles.input} onChangeText={setSsid} value={ssid} placeholder="Ağ Adı (SSID)" placeholderTextColor="#666" />
+          <TextInput style={styles.input} onChangeText={setWifiPassword} value={wifiPassword} placeholder="Ağ Şifresi (Açık ağ ise boş bırakın)" placeholderTextColor="#666" secureTextEntry={false} />
+          <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={writeNfcData} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>KARTA WİFİ YAZ</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cancelButton} onPress={() => setWriteMode('NONE')}>
+            <Text style={styles.cancelText}>Geri Dön</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* --- BLUETOOTH INPUT EKRANI --- */}
+      {writeMode === 'BLUETOOTH' && (
+        <View style={styles.fullWidth}>
+          <Text style={styles.sectionTitle}>Cihazın MAC Adresini Girin:</Text>
+          <TextInput style={styles.input} onChangeText={setMacAddress} value={macAddress} placeholder="Örn: A1:B2:C3:D4:E5:F6" placeholderTextColor="#666" autoCapitalize="characters" />
+          <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={writeNfcData} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>KARTA BLUETOOTH YAZ</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelButton} onPress={() => setWriteMode('NONE')}>
             <Text style={styles.cancelText}>Geri Dön</Text>
@@ -173,12 +236,10 @@ const styles = StyleSheet.create({
   readButton: { backgroundColor: '#34c759' },
   writeButton: { backgroundColor: '#007AFF' },
   contactButton: { backgroundColor: '#af52de' },
+  wifiButton: { backgroundColor: '#f4a261' },
+  bluetoothButton: { backgroundColor: '#2a9d8f' },
   saveButton: { backgroundColor: '#ff9500', marginTop: 10 },
   buttonText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
-  cancelButton: { 
-    width: '100%', 
-    alignItems: 'center',
-    marginTop: 15 
-  },
+  cancelButton: { width: '100%', alignItems: 'center', marginTop: 15 },
   cancelText: { color: '#ff3b30', fontSize: 15, fontWeight: 'bold' }
 });
