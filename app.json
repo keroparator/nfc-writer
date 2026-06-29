@@ -2,7 +2,7 @@
   "expo": {
     "name": "nfc-writer",
     "slug": "nfc-writer",
-    "version": "0.0.7.1",
+    "version": "0.0.8",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "assetBundlePatterns": [

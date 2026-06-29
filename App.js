@@ -34,6 +34,10 @@ export default function App() {
   // --- YENİ UI STATE'İ (Alt Menü İçin) ---
   const [activeTab, setActiveTab] = useState('READ'); // 'READ' veya 'WRITE'
 
+  // --- YENİ KOPYALAMA STATE'LERİ ---
+  const [copyStep, setCopyStep] = useState(1); // 1: Okuma/Hafızaya Alma, 2: Yazma/Yapıştırma
+  const [copiedRecords, setCopiedRecords] = useState(null);
+
   // --- KART OKUMA MEKANİZMASI (DEĞİŞTİRİLMEDİ) ---
   async function startNfcScan() {
     try {
@@ -118,6 +122,68 @@ export default function App() {
     }
   }
 
+  // --- YENİ: KOPYALAMA MEKANİZMASI (ADIM 1 - OKUMA) ---
+  async function handleCopyStep1() {
+    try {
+      setLoading(true);
+      setCardId('Kaynak kartı okumak için yaklaştırın...');
+      await NfcManager.requestTechnology([NfcTech.Ndef]);
+      const tag = await NfcManager.getTag();
+
+      if (tag && tag.ndefMessage && tag.ndefMessage.length > 0) {
+        setCopiedRecords(tag.ndefMessage); // Veriyi hiçbir değişiklik yapmadan hafızaya alıyoruz
+        Alert.alert('Hafızaya Alındı!', 'Veri kopyalandı. Şimdi verinin yazılacağı (yapıştırılacağı) kartı yaklaştırın.');
+        setCopyStep(2); // 2. adıma (Yazma) geç
+        setCardId('Veri hafızada bekliyor.');
+      } else {
+        Alert.alert('Hata', 'Bu kartta kopyalanabilecek bir veri (NDEF) bulunamadı veya kart boş.');
+        setCardId('Veri bulunamadı.');
+      }
+    } catch (ex) {
+      console.warn("Kopyalama (Okuma) Hatası:", ex);
+      Alert.alert('Hata', 'Kart okunamadı veya erken çektiniz. Kartın NDEF formatlı olduğundan emin olun.');
+      setCardId('Okuma başarısız.');
+    } finally {
+      NfcManager.cancelTechnologyRequest();
+      setLoading(false);
+    }
+  }
+
+  // --- YENİ: KOPYALAMA MEKANİZMASI (ADIM 2 - YAZMA) ---
+  async function handleCopyStep2() {
+    try {
+      setLoading(true);
+      setCardId('Hedef kartı yazmak için yaklaştırın...');
+      await NfcManager.requestTechnology([NfcTech.Ndef]);
+      
+      if (copiedRecords) {
+        let bytes = null;
+        try {
+          // Hafızadaki veriyi karta uygun byte formatına geri çeviriyoruz
+          bytes = Ndef.encodeMessage(copiedRecords);
+        } catch (e) {
+          bytes = copiedRecords; // Eğer fallback gerekirse
+        }
+        
+        await NfcManager.ndefHandler.writeNdefMessage(bytes);
+        Alert.alert('Başarılı!', 'Hafızadaki veri yeni karta başarıyla yazıldı.');
+        setCardId('Kopyalama Tamamlandı!');
+        
+        // İşlem bitince hafızayı sıfırla ve menüye dön
+        setCopiedRecords(null);
+        setCopyStep(1);
+        setWriteMode('NONE');
+      }
+    } catch (ex) {
+      console.warn("Kopyalama (Yazma) Hatası:", ex);
+      Alert.alert('Hata', 'Yazma başarısız. Kartı erken çekmiş olabilirsin veya kart kilitli olabilir.');
+      setCardId('Yazma başarısız.');
+    } finally {
+      NfcManager.cancelTechnologyRequest();
+      setLoading(false);
+    }
+  }
+
   // --- RENDER YARDIMCILARI ---
   const renderHeader = (title) => (
     <View style={styles.header}>
@@ -156,6 +222,14 @@ export default function App() {
           Yazmak istediğiniz verinin tipini seçin.
         </Text>
 
+        <TouchableOpacity style={styles.optionCard} onPress={() => { setWriteMode('COPY'); setCopyStep(1); setCopiedRecords(null); }}>
+          <View style={styles.optionTextContainer}>
+            <Text style={styles.optionTitle}>📋 Kopyala</Text>
+            <Text style={styles.optionDesc}>Bir karttaki veriyi okuyup başka bir karta birebir kopyalar.</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('WEBSITE')}>
           <View style={styles.optionTextContainer}>
             <Text style={styles.optionTitle}>🌐 Web Sitesi</Text>
@@ -192,9 +266,22 @@ export default function App() {
   );
 
   const renderWriteForm = () => {
+    // Kopyalama veya Normal Yazma için dinamik buton ayarları
+    let onPressAction = writeNfcData;
+    let buttonText = writeMode === 'ERASE' ? 'Kartı Temizle' : 'Veriyi Yaz';
+
+    if (writeMode === 'COPY') {
+      onPressAction = copyStep === 1 ? handleCopyStep1 : handleCopyStep2;
+      buttonText = copyStep === 1 ? 'Kartı Oku ve Kopyala' : 'Hafızadakini Yapıştır';
+    }
+
     return (
       <View style={styles.tabContainer}>
-        {renderHeader(writeMode === 'ERASE' ? 'Veri Silme' : 'Veri Girişi')}
+        {renderHeader(
+          writeMode === 'ERASE' ? 'Veri Silme' : 
+          writeMode === 'COPY' ? 'Kart Kopyalama' : 
+          'Veri Girişi'
+        )}
         <ScrollView contentContainerStyle={styles.scrollContent}>
           
           <View style={styles.statusCard}>
@@ -233,21 +320,37 @@ export default function App() {
             </View>
           )}
 
+          {writeMode === 'COPY' && (
+            <View style={{ marginVertical: 16 }}>
+              {copyStep === 1 ? (
+                <Text style={styles.descriptionText}>
+                  Adım 1: Kopyalamak istediğiniz veriyi içeren kartı telefonunuza yaklaştırın ve aşağıdaki butona basın. Veri okunarak hafızaya alınacaktır.
+                </Text>
+              ) : (
+                <Text style={styles.descriptionText}>
+                  Adım 2: Veri başarıyla hafızaya alındı! Şimdi verinin yazılacağı yeni kartı telefonunuza yaklaştırın ve aşağıdaki butona basarak veriyi yapıştırın.
+                </Text>
+              )}
+            </View>
+          )}
+
           <TouchableOpacity 
             style={[styles.primaryButton, writeMode === 'ERASE' && { backgroundColor: COLORS.error }]} 
-            onPress={writeNfcData} 
+            onPress={onPressAction} 
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryButtonText}>
-                {writeMode === 'ERASE' ? 'Kartı Temizle' : 'Veriyi Yaz'}
-              </Text>
+              <Text style={styles.primaryButtonText}>{buttonText}</Text>
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.ghostButton} onPress={() => setWriteMode('NONE')} disabled={loading}>
+          <TouchableOpacity style={styles.ghostButton} onPress={() => {
+            setWriteMode('NONE');
+            setCopiedRecords(null);
+            setCopyStep(1);
+          }} disabled={loading}>
             <Text style={styles.ghostButtonText}>İptal</Text>
           </TouchableOpacity>
 
