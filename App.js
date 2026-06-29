@@ -99,7 +99,7 @@ export default function App() {
       } else if (writeMode === 'ERASE') {
         await NfcManager.requestTechnology([NfcTech.Ndef]);
         // Boş bir NDEF mesajı ile kartı temizliyoruz
-        bytes = [];
+        bytes = [0xD0, 0x00, 0x00];
       }
 
       if (bytes !== null) {
