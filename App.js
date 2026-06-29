@@ -52,13 +52,13 @@ export default function App() {
     }
   }
 
-  // --- KARTA NDEF VERİSİ YAZMA MEKANİZMASI (DEĞİŞTİRİLMEDİ) ---
+  // --- KARTA NDEF VERİSİ YAZMA / SİLME MEKANİZMASI ---
   async function writeNfcData() {
     let bytes = null;
 
     try {
       setLoading(true);
-      setCardId('Yazma modunda, kartı yaklaştırın...');
+      setCardId(writeMode === 'ERASE' ? 'Silme modunda, kartı yaklaştırın...' : 'Yazma modunda, kartı yaklaştırın...');
 
       if (writeMode === 'WEBSITE') {
         if (!url) { 
@@ -95,18 +95,23 @@ export default function App() {
         bytes = Ndef.encodeMessage([
           Ndef.mimeMediaRecord('application/vnd.bluetooth.ep.oob', payload)
         ]);
+        
+      } else if (writeMode === 'ERASE') {
+        await NfcManager.requestTechnology([NfcTech.Ndef]);
+        // Boş bir NDEF mesajı ile kartı temizliyoruz
+        bytes = [];
       }
 
-      if (bytes) {
+      if (bytes !== null) {
         await NfcManager.ndefHandler.writeNdefMessage(bytes);
-        Alert.alert('Başarılı!', 'Veri karta başarıyla yazıldı.');
-        setCardId('Yazma Başarılı!');
+        Alert.alert('Başarılı!', writeMode === 'ERASE' ? 'Kart başarıyla temizlendi.' : 'Veri karta başarıyla yazıldı.');
+        setCardId(writeMode === 'ERASE' ? 'Silme Başarılı!' : 'Yazma Başarılı!');
         setWriteMode('NONE'); 
       }
     } catch (ex) {
-      console.warn("NFC Yazma Hatası:", ex);
-      Alert.alert('Yazma Hatası', 'Kartı erken çekmiş olabilirsin veya bu kart yazılabilir değil.');
-      setCardId('Yazma başarısız.');
+      console.warn("NFC İşlem Hatası:", ex);
+      Alert.alert('Hata', 'Kartı erken çekmiş olabilirsin veya bu kart desteklenmiyor.');
+      setCardId(writeMode === 'ERASE' ? 'Silme başarısız.' : 'Yazma başarısız.');
     } finally {
       NfcManager.cancelTechnologyRequest();
       setLoading(false);
@@ -174,6 +179,14 @@ export default function App() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('ERASE')}>
+          <View style={styles.optionTextContainer}>
+            <Text style={[styles.optionTitle, { color: COLORS.error }]}>🗑️ Veri Sil</Text>
+            <Text style={styles.optionDesc}>Kartın içindeki mevcut tüm NDEF verilerini temizler.</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -181,7 +194,7 @@ export default function App() {
   const renderWriteForm = () => {
     return (
       <View style={styles.tabContainer}>
-        {renderHeader('Veri Girişi')}
+        {renderHeader(writeMode === 'ERASE' ? 'Veri Silme' : 'Veri Girişi')}
         <ScrollView contentContainerStyle={styles.scrollContent}>
           
           <View style={styles.statusCard}>
@@ -214,8 +227,24 @@ export default function App() {
             </View>
           )}
 
-          <TouchableOpacity style={styles.primaryButton} onPress={writeNfcData} disabled={loading}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Veriyi Yaz</Text>}
+          {writeMode === 'ERASE' && (
+            <View style={{ marginVertical: 16 }}>
+              <Text style={styles.descriptionText}>Kartın içeriğini kalıcı olarak silmek için telefonu karta yaklaştırıp aşağıdaki butona basın.</Text>
+            </View>
+          )}
+
+          <TouchableOpacity 
+            style={[styles.primaryButton, writeMode === 'ERASE' && { backgroundColor: COLORS.error }]} 
+            onPress={writeNfcData} 
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>
+                {writeMode === 'ERASE' ? 'Kartı Temizle' : 'Veriyi Yaz'}
+              </Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.ghostButton} onPress={() => setWriteMode('NONE')} disabled={loading}>
