@@ -24,6 +24,9 @@ export default function App() {
   const { width } = useWindowDimensions();
   const scrollRef = useRef(null);
 
+  // --- AYARLAR MENÜSÜ STATE'İ ---
+  const [showSettings, setShowSettings] = useState(false);
+
   // --- ORİJİNAL STATE'LER ---
   const [loading, setLoading] = useState(false);
   const [cardId, setCardId] = useState('Tarama için bekleniyor...');
@@ -238,6 +241,28 @@ export default function App() {
   const renderHeader = (title) => (
     <View style={styles.header}>
       <Text style={styles.headerTitle}>{title}</Text>
+      <TouchableOpacity onPress={() => setShowSettings(true)} style={{ padding: 4 }}>
+        <Text style={{ fontSize: 24 }}>⚙️</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // --- AYARLAR SAYFASI ---
+  const renderSettingsScreen = () => (
+    <View style={{ flex: 1, backgroundColor: COLORS.background }}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => setShowSettings(false)} style={{ padding: 4 }}>
+          <Text style={{ fontSize: 28, color: COLORS.primary }}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Ayarlar</Text>
+        <View style={{ width: 28 }} /> {/* Başlığı ortalamak için boşluk */}
+      </View>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+        <Text style={{ fontSize: 64, marginBottom: 16 }}>⚙️</Text>
+        <Text style={styles.descriptionText}>
+          Ayarlar menüsü şu an boş. Yakında buraya yeni özellikler eklenecek.
+        </Text>
+      </View>
     </View>
   );
 
@@ -423,60 +448,68 @@ export default function App() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         
-        {/* Yatay Kaydırılabilir İçerik Alanı */}
-        <View style={styles.contentArea}>
-          <ScrollView
-            ref={scrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={onMomentumScrollEnd}
-            style={{ flex: 1 }}
-          >
-            {/* 0. TAB - OKU */}
-            <View style={{ width, height: '100%' }}>
-              {renderReadTab()}
+        {showSettings ? (
+          // Ayarlar sayfası aktifse sadece onu renderla
+          renderSettingsScreen()
+        ) : (
+          // Ayarlar sayfası kapalıysa ana sekmeleri göster
+          <>
+            {/* Yatay Kaydırılabilir İçerik Alanı */}
+            <View style={styles.contentArea}>
+              <ScrollView
+                ref={scrollRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={onMomentumScrollEnd}
+                style={{ flex: 1 }}
+              >
+                {/* 0. TAB - OKU */}
+                <View style={{ width, height: '100%' }}>
+                  {renderReadTab()}
+                </View>
+
+                {/* 1. TAB - YAZ */}
+                <View style={{ width, height: '100%' }}>
+                  {writeMode !== 'NONE' && ['WEBSITE', 'CONTACT', 'BLUETOOTH'].includes(writeMode) 
+                    ? renderWriteForm() 
+                    : renderWriteOptions()}
+                </View>
+
+                {/* 2. TAB - DİĞER */}
+                <View style={{ width, height: '100%' }}>
+                  {writeMode !== 'NONE' && ['COPY', 'ERASE'].includes(writeMode) 
+                    ? renderWriteForm() 
+                    : renderOtherOptions()}
+                </View>
+              </ScrollView>
             </View>
 
-            {/* 1. TAB - YAZ */}
-            <View style={{ width, height: '100%' }}>
-              {writeMode !== 'NONE' && ['WEBSITE', 'CONTACT', 'BLUETOOTH'].includes(writeMode) 
-                ? renderWriteForm() 
-                : renderWriteOptions()}
+            {/* Alt Navigasyon (Bottom Nav) */}
+            <View style={styles.bottomNav}>
+              <TouchableOpacity 
+                style={[styles.navItem, activeTab === 0 && styles.navItemActive]} 
+                onPress={() => handleTabPress(0)}>
+                <Text style={[styles.navIcon, activeTab === 0 && styles.navIconActive]}>📡</Text>
+                <Text style={[styles.navText, activeTab === 0 && styles.navTextActive]}>Oku</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.navItem, activeTab === 1 && styles.navItemActive]} 
+                onPress={() => handleTabPress(1)}>
+                <Text style={[styles.navIcon, activeTab === 1 && styles.navIconActive]}>✍️</Text>
+                <Text style={[styles.navText, activeTab === 1 && styles.navTextActive]}>Yaz</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.navItem, activeTab === 2 && styles.navItemActive]} 
+                onPress={() => handleTabPress(2)}>
+                <Text style={[styles.navIcon, activeTab === 2 && styles.navIconActive]}>🛠️</Text>
+                <Text style={[styles.navText, activeTab === 2 && styles.navTextActive]}>Diğer</Text>
+              </TouchableOpacity>
             </View>
-
-            {/* 2. TAB - DİĞER */}
-            <View style={{ width, height: '100%' }}>
-              {writeMode !== 'NONE' && ['COPY', 'ERASE'].includes(writeMode) 
-                ? renderWriteForm() 
-                : renderOtherOptions()}
-            </View>
-          </ScrollView>
-        </View>
-
-        {/* Alt Navigasyon (Bottom Nav) */}
-        <View style={styles.bottomNav}>
-          <TouchableOpacity 
-            style={[styles.navItem, activeTab === 0 && styles.navItemActive]} 
-            onPress={() => handleTabPress(0)}>
-            <Text style={[styles.navIcon, activeTab === 0 && styles.navIconActive]}>📡</Text>
-            <Text style={[styles.navText, activeTab === 0 && styles.navTextActive]}>Oku</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.navItem, activeTab === 1 && styles.navItemActive]} 
-            onPress={() => handleTabPress(1)}>
-            <Text style={[styles.navIcon, activeTab === 1 && styles.navIconActive]}>✍️</Text>
-            <Text style={[styles.navText, activeTab === 1 && styles.navTextActive]}>Yaz</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.navItem, activeTab === 2 && styles.navItemActive]} 
-            onPress={() => handleTabPress(2)}>
-            <Text style={[styles.navIcon, activeTab === 2 && styles.navIconActive]}>🛠️</Text>
-            <Text style={[styles.navText, activeTab === 2 && styles.navTextActive]}>Diğer</Text>
-          </TouchableOpacity>
-        </View>
+          </>
+        )}
 
       </View>
     </SafeAreaView>
@@ -490,7 +523,8 @@ const styles = StyleSheet.create({
   tabContainer: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
   
-  header: { height: 56, justifyContent: 'center', paddingHorizontal: 16, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.outlineVariant },
+  // Header stili başlık ve sağdaki ikonu yan yana alması için güncellendi (flexDirection eklendi)
+  header: { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.outlineVariant },
   headerTitle: { fontSize: 22, fontWeight: '600', color: COLORS.primary },
   
   readContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
@@ -517,7 +551,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.outlineVariant, borderRadius: 8, padding: 16, fontSize: 16, color: COLORS.onSurface },
 
   bottomNav: { flexDirection: 'row', backgroundColor: COLORS.surfaceContainerLowest, borderTopWidth: 1, borderTopColor: COLORS.outlineVariant, paddingVertical: 8, paddingBottom: 16 },
-  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginHorizontal: 8, borderRadius: 12 }, // marginHorizontal 16'dan 8'e çekildi (3 buton sığsın diye)
+  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginHorizontal: 8, borderRadius: 12 },
   navItemActive: { backgroundColor: COLORS.surfaceVariant },
   navIcon: { fontSize: 24, opacity: 0.6 },
   navIconActive: { opacity: 1 },
