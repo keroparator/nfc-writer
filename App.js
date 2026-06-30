@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, ActivityIndicator, TextInput, ScrollView, SafeAreaView, Platform, StatusBar } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, ActivityIndicator, TextInput, ScrollView, SafeAreaView, Platform, StatusBar, useWindowDimensions } from 'react-native';
 import NfcManager, { NfcTech, Ndef } from 'react-native-nfc-manager';
 
 // NFC Donanım katmanını ayağa kaldırıyoruz
@@ -21,6 +21,9 @@ const COLORS = {
 };
 
 export default function App() {
+  const { width } = useWindowDimensions();
+  const scrollRef = useRef(null);
+
   // --- ORİJİNAL STATE'LER ---
   const [loading, setLoading] = useState(false);
   const [cardId, setCardId] = useState('Tarama için bekleniyor...');
@@ -31,12 +34,30 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [macAddress, setMacAddress] = useState('');
 
-  // --- YENİ UI STATE'İ (Alt Menü İçin) ---
-  const [activeTab, setActiveTab] = useState('READ'); // 'READ' veya 'WRITE'
+  // --- YENİ UI STATE'İ (Alt Menü ve Swipe İçin) ---
+  const [activeTab, setActiveTab] = useState(0); // 0: READ, 1: WRITE, 2: OTHER
 
   // --- YENİ KOPYALAMA STATE'LERİ ---
   const [copyStep, setCopyStep] = useState(1); // 1: Okuma/Hafızaya Alma, 2: Yazma/Yapıştırma
   const [copiedRecords, setCopiedRecords] = useState(null);
+
+  // --- SEKME DEĞİŞTİRME MEKANİZMALARI ---
+  const handleTabPress = (index) => {
+    setActiveTab(index);
+    setWriteMode('NONE');
+    setCopyStep(1);
+    scrollRef.current?.scrollTo({ x: index * width, animated: true });
+  };
+
+  const onMomentumScrollEnd = (e) => {
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / width);
+    if (activeTab !== index) {
+      setActiveTab(index);
+      setWriteMode('NONE');
+      setCopyStep(1);
+    }
+  };
 
   // --- KART OKUMA MEKANİZMASI (DEĞİŞTİRİLMEDİ) ---
   async function startNfcScan() {
@@ -122,7 +143,7 @@ export default function App() {
     }
   }
 
-  // --- YENİ: KOPYALAMA MEKANİZMASI (ADIM 1 - OKUMA) ---
+  // --- KOPYALAMA MEKANİZMASI (ADIM 1 - OKUMA) ---
   async function handleCopyStep1() {
     try {
       setLoading(true);
@@ -131,10 +152,9 @@ export default function App() {
       const tag = await NfcManager.getTag();
 
       if (tag && tag.ndefMessage && tag.ndefMessage.length > 0) {
-        setCopiedRecords(tag.ndefMessage); // Veriyi hiçbir değişiklik yapmadan hafızaya alıyoruz
-        Alert.alert('OKUNAN VERİ (DEBUG)', JSON.stringify(tag.ndefMessage)); // DEBUG: ham veriyi göster
+        setCopiedRecords(tag.ndefMessage); 
         Alert.alert('Hafızaya Alındı!', 'Veri kopyalandı. Şimdi verinin yazılacağı (yapıştırılacağı) kartı yaklaştırın.');
-        setCopyStep(2); // 2. adıma (Yazma) geç
+        setCopyStep(2);
         setCardId('Veri hafızada bekliyor.');
       } else {
         Alert.alert('Hata', 'Bu kartta kopyalanabilecek bir veri (NDEF) bulunamadı veya kart boş.');
@@ -150,7 +170,7 @@ export default function App() {
     }
   }
 
-  // --- YENİ: KOPYALAMA MEKANİZMASI (ADIM 2 - YAZMA) ---
+  // --- KOPYALAMA MEKANİZMASI (ADIM 2 - YAZMA) ---
   async function handleCopyStep2() {
     try {
       setLoading(true);
@@ -160,32 +180,25 @@ export default function App() {
       if (copiedRecords) {
         let bytes = null;
         try {
-          // Hafızadaki her kaydı, kütüphanenin kendi record-builder'larıyla yeniden oluşturuyoruz.
-          // Ham obje (plain object) vermek yerine Ndef.uriRecord / Ndef.textRecord / Ndef.mimeMediaRecord
-          // kullanmak, "undefined is not a function" hatasını önler.
           const rebuiltRecords = copiedRecords.map(record => {
             const typeArr = record.type ? Array.from(record.type) : [];
             const payloadArr = record.payload ? Array.from(record.payload) : [];
             const typeStr = String.fromCharCode(...typeArr);
 
-            // TNF_WELL_KNOWN (1) + RTD_URI ("U")  -> Web Sitesi / URL kartları
             if (record.tnf === 1 && typeStr === 'U') {
               const uri = Ndef.uri.decodePayload(payloadArr);
               return Ndef.uriRecord(uri);
             }
 
-            // TNF_WELL_KNOWN (1) + RTD_TEXT ("T") -> Düz metin kartları
             if (record.tnf === 1 && typeStr === 'T') {
               const text = Ndef.text.decodePayload(payloadArr);
               return Ndef.textRecord(text);
             }
 
-            // TNF_MIME_MEDIA (2) -> vCard (Kişi Kartı) ve Bluetooth kartları
             if (record.tnf === 2) {
               return Ndef.mimeMediaRecord(typeStr, payloadArr);
             }
 
-            // Tanınmayan/diğer tipler için ham veriyle devam etmeyi dene (fallback)
             return {
               tnf: record.tnf,
               type: typeArr,
@@ -207,7 +220,6 @@ export default function App() {
         Alert.alert('Başarılı!', 'Hafızadaki veri yeni karta başarıyla yazıldı.');
         setCardId('Kopyalama Tamamlandı!');
         
-        // İşlem bitince hafızayı sıfırla ve menüye dön
         setCopiedRecords(null);
         setCopyStep(1);
         setWriteMode('NONE');
@@ -260,14 +272,6 @@ export default function App() {
           Yazmak istediğiniz verinin tipini seçin.
         </Text>
 
-        <TouchableOpacity style={styles.optionCard} onPress={() => { setWriteMode('COPY'); setCopyStep(1); setCopiedRecords(null); }}>
-          <View style={styles.optionTextContainer}>
-            <Text style={styles.optionTitle}>📋 Kopyala</Text>
-            <Text style={styles.optionDesc}>Bir karttaki veriyi okuyup başka bir karta birebir kopyalar.</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('WEBSITE')}>
           <View style={styles.optionTextContainer}>
             <Text style={styles.optionTitle}>🌐 Web Sitesi</Text>
@@ -291,6 +295,25 @@ export default function App() {
           </View>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
+      </ScrollView>
+    </View>
+  );
+
+  const renderOtherOptions = () => (
+    <View style={styles.tabContainer}>
+      {renderHeader('Diğer İşlemler')}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.descriptionText}>
+          Kartınız ile yapabileceğiniz diğer gelişmiş işlemler.
+        </Text>
+
+        <TouchableOpacity style={styles.optionCard} onPress={() => { setWriteMode('COPY'); setCopyStep(1); setCopiedRecords(null); }}>
+          <View style={styles.optionTextContainer}>
+            <Text style={styles.optionTitle}>📋 Kopyala</Text>
+            <Text style={styles.optionDesc}>Bir karttaki veriyi okuyup başka bir karta birebir kopyalar.</Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('ERASE')}>
           <View style={styles.optionTextContainer}>
@@ -304,7 +327,6 @@ export default function App() {
   );
 
   const renderWriteForm = () => {
-    // Kopyalama veya Normal Yazma için dinamik buton ayarları
     let onPressAction = writeNfcData;
     let buttonText = writeMode === 'ERASE' ? 'Kartı Temizle' : 'Veriyi Yaz';
 
@@ -401,26 +423,58 @@ export default function App() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         
-        {/* İçerik Alanı */}
+        {/* Yatay Kaydırılabilir İçerik Alanı */}
         <View style={styles.contentArea}>
-          {activeTab === 'READ' ? renderReadTab() : 
-            (writeMode === 'NONE' ? renderWriteOptions() : renderWriteForm())}
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={onMomentumScrollEnd}
+            style={{ flex: 1 }}
+          >
+            {/* 0. TAB - OKU */}
+            <View style={{ width, height: '100%' }}>
+              {renderReadTab()}
+            </View>
+
+            {/* 1. TAB - YAZ */}
+            <View style={{ width, height: '100%' }}>
+              {writeMode !== 'NONE' && ['WEBSITE', 'CONTACT', 'BLUETOOTH'].includes(writeMode) 
+                ? renderWriteForm() 
+                : renderWriteOptions()}
+            </View>
+
+            {/* 2. TAB - DİĞER */}
+            <View style={{ width, height: '100%' }}>
+              {writeMode !== 'NONE' && ['COPY', 'ERASE'].includes(writeMode) 
+                ? renderWriteForm() 
+                : renderOtherOptions()}
+            </View>
+          </ScrollView>
         </View>
 
         {/* Alt Navigasyon (Bottom Nav) */}
         <View style={styles.bottomNav}>
           <TouchableOpacity 
-            style={[styles.navItem, activeTab === 'READ' && styles.navItemActive]} 
-            onPress={() => { setActiveTab('READ'); setWriteMode('NONE'); }}>
-            <Text style={[styles.navIcon, activeTab === 'READ' && styles.navIconActive]}>📡</Text>
-            <Text style={[styles.navText, activeTab === 'READ' && styles.navTextActive]}>Oku</Text>
+            style={[styles.navItem, activeTab === 0 && styles.navItemActive]} 
+            onPress={() => handleTabPress(0)}>
+            <Text style={[styles.navIcon, activeTab === 0 && styles.navIconActive]}>📡</Text>
+            <Text style={[styles.navText, activeTab === 0 && styles.navTextActive]}>Oku</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={[styles.navItem, activeTab === 'WRITE' && styles.navItemActive]} 
-            onPress={() => { setActiveTab('WRITE'); }}>
-            <Text style={[styles.navIcon, activeTab === 'WRITE' && styles.navIconActive]}>✍️</Text>
-            <Text style={[styles.navText, activeTab === 'WRITE' && styles.navTextActive]}>Yaz</Text>
+            style={[styles.navItem, activeTab === 1 && styles.navItemActive]} 
+            onPress={() => handleTabPress(1)}>
+            <Text style={[styles.navIcon, activeTab === 1 && styles.navIconActive]}>✍️</Text>
+            <Text style={[styles.navText, activeTab === 1 && styles.navTextActive]}>Yaz</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.navItem, activeTab === 2 && styles.navItemActive]} 
+            onPress={() => handleTabPress(2)}>
+            <Text style={[styles.navIcon, activeTab === 2 && styles.navIconActive]}>🛠️</Text>
+            <Text style={[styles.navText, activeTab === 2 && styles.navTextActive]}>Diğer</Text>
           </TouchableOpacity>
         </View>
 
@@ -463,7 +517,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.outlineVariant, borderRadius: 8, padding: 16, fontSize: 16, color: COLORS.onSurface },
 
   bottomNav: { flexDirection: 'row', backgroundColor: COLORS.surfaceContainerLowest, borderTopWidth: 1, borderTopColor: COLORS.outlineVariant, paddingVertical: 8, paddingBottom: 16 },
-  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginHorizontal: 16, borderRadius: 12 },
+  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginHorizontal: 8, borderRadius: 12 }, // marginHorizontal 16'dan 8'e çekildi (3 buton sığsın diye)
   navItemActive: { backgroundColor: COLORS.surfaceVariant },
   navIcon: { fontSize: 24, opacity: 0.6 },
   navIconActive: { opacity: 1 },
