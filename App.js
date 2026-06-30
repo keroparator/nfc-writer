@@ -131,10 +131,10 @@ export default function App() {
       const tag = await NfcManager.getTag();
 
       if (tag && tag.ndefMessage && tag.ndefMessage.length > 0) {
-        setCopiedRecords(tag.ndefMessage);
-        Alert.alert('OKUNAN VERİ (DEBUG)', JSON.stringify(tag.ndefMessage)); // <-- BUNU EKLE
+        setCopiedRecords(tag.ndefMessage); // Veriyi hiçbir değişiklik yapmadan hafızaya alıyoruz
+        Alert.alert('OKUNAN VERİ (DEBUG)', JSON.stringify(tag.ndefMessage)); // DEBUG: ham veriyi göster
         Alert.alert('Hafızaya Alındı!', 'Veri kopyalandı. Şimdi verinin yazılacağı (yapıştırılacağı) kartı yaklaştırın.');
-        setCopyStep(2);
+        setCopyStep(2); // 2. adıma (Yazma) geç
         setCardId('Veri hafızada bekliyor.');
       } else {
         Alert.alert('Hata', 'Bu kartta kopyalanabilecek bir veri (NDEF) bulunamadı veya kart boş.');
@@ -160,16 +160,41 @@ export default function App() {
       if (copiedRecords) {
         let bytes = null;
         try {
-          // Hafızadaki veriyi karta uygun byte formatına garantili çeviriyoruz
-          // tag.ndefMessage Uint8Array dönebilir, Ndef.encodeMessage saf Array bekler.
-          const formattedRecords = copiedRecords.map(record => ({
-            tnf: record.tnf,
-            type: record.type ? Array.from(record.type) : [],
-            id: record.id ? Array.from(record.id) : [],
-            payload: record.payload ? Array.from(record.payload) : []
-          }));
-          
-          bytes = Ndef.encodeMessage(formattedRecords);
+          // Hafızadaki her kaydı, kütüphanenin kendi record-builder'larıyla yeniden oluşturuyoruz.
+          // Ham obje (plain object) vermek yerine Ndef.uriRecord / Ndef.textRecord / Ndef.mimeMediaRecord
+          // kullanmak, "undefined is not a function" hatasını önler.
+          const rebuiltRecords = copiedRecords.map(record => {
+            const typeArr = record.type ? Array.from(record.type) : [];
+            const payloadArr = record.payload ? Array.from(record.payload) : [];
+            const typeStr = String.fromCharCode(...typeArr);
+
+            // TNF_WELL_KNOWN (1) + RTD_URI ("U")  -> Web Sitesi / URL kartları
+            if (record.tnf === 1 && typeStr === 'U') {
+              const uri = Ndef.uri.decodePayload(payloadArr);
+              return Ndef.uriRecord(uri);
+            }
+
+            // TNF_WELL_KNOWN (1) + RTD_TEXT ("T") -> Düz metin kartları
+            if (record.tnf === 1 && typeStr === 'T') {
+              const text = Ndef.text.decodePayload(payloadArr);
+              return Ndef.textRecord(text);
+            }
+
+            // TNF_MIME_MEDIA (2) -> vCard (Kişi Kartı) ve Bluetooth kartları
+            if (record.tnf === 2) {
+              return Ndef.mimeMediaRecord(typeStr, payloadArr);
+            }
+
+            // Tanınmayan/diğer tipler için ham veriyle devam etmeyi dene (fallback)
+            return {
+              tnf: record.tnf,
+              type: typeArr,
+              id: record.id ? Array.from(record.id) : [],
+              payload: payloadArr,
+            };
+          });
+
+          bytes = Ndef.encodeMessage(rebuiltRecords);
         } catch (e) {
           console.warn("Veri Encode Hatası:", e);
           Alert.alert('Hata', `Dönüştürme hatası: ${e?.message || JSON.stringify(e)}`);
