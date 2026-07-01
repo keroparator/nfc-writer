@@ -28,15 +28,13 @@ import {
 } from 'react-native';
 import NfcManager, { NfcTech, Ndef } from 'react-native-nfc-manager';
 
-// Uygulama açılır açılmaz NFC donanım katmanını ayağa kaldırıyoruz.
 NfcManager.start();
 
 // =================================================================================
 // TEMA RENKLERİ
 // =================================================================================
-// Sabit bir COLORS objesi yerine, telefonun sistem temasına (açık/koyu) göre
-// seçilecek iki ayrı renk paleti tanımlıyoruz. Bileşen içinde useColorScheme()
-// ile hangi paletin kullanılacağına karar veriyoruz.
+// Sistem temasına ek olarak kullanıcı Settings ekranından manuel geçiş yapabilir.
+// themeOverride state'i null ise sistem teması, 'light'/'dark' ise manuel seçim kullanılır.
 
 const lightColors = {
   background: '#f8f9ff',
@@ -47,8 +45,6 @@ const lightColors = {
   onSurfaceVariant: '#434655',
   primary: '#004ac6',
   onPrimary: '#ffffff',
-  primaryContainer: '#2563eb',
-  onPrimaryContainer: '#eeefff',
   outlineVariant: '#c3c6d7',
   error: '#ba1a1a',
 };
@@ -62,24 +58,22 @@ const darkColors = {
   onSurfaceVariant: '#aab2c5',
   primary: '#7da9ff',
   onPrimary: '#06182f',
-  primaryContainer: '#2563eb',
-  onPrimaryContainer: '#eeefff',
   outlineVariant: '#33415a',
   error: '#ff6b6b',
 };
 
 // =================================================================================
-// ÇEVİRİ SÖZLÜĞÜ
+// CEVIRI SOZLUGU
 // =================================================================================
-// Arayüzdeki ve Alert kutularındaki tüm metinler burada anahtar (key) bazlı olarak
-// tutulur. Dinamik bir değer (örn. kart UID'si) gereken metinler fonksiyon olarak
-// tanımlanır; diğerleri düz string'dir. Bileşen içindeki t() yardımcı fonksiyonu
-// aktif dile göre doğru metni döndürür.
+// Tüm arayüz ve Alert metinleri burada tutulur. Dinamik içerik gerektiren anahtarlar
+// fonksiyon olarak tanımlanır (örn. cardCapturedMsg). t() ile aktif dile göre okunur.
+// statusKey state'i bu anahtarları tutar; böylece dil değişince status otomatik güncellenir.
 
 const translations = {
   tr: {
     readTabTitle: 'NFC Oku',
     writeTabTitle: 'NFC Yaz',
+    settingsTabTitle: 'Ayarlar',
     statusLabel: 'DURUM',
 
     waitingForScan: 'Tarama için bekleniyor...',
@@ -91,15 +85,15 @@ const translations = {
     readButton: 'Kart Oku',
 
     writeOptionsPrompt: 'Yazmak istediğiniz verinin tipini seçin.',
-    copyTitle: '📋 Kopyala',
+    copyTitle: 'Kopyala',
     copyDesc: 'Bir karttaki veriyi okuyup başka bir karta birebir kopyalar.',
-    websiteTitle: '🌐 Web Sitesi',
+    websiteTitle: 'Web Sitesi',
     websiteDesc: 'Okutulduğunda otomatik olarak web sitesine gider.',
-    contactTitle: '👤 Kişi Kartı',
+    contactTitle: 'Kişi Kartı',
     contactDesc: 'Okutulduğunda kişiyi rehbere kaydeder.',
-    bluetoothTitle: '🎧 Bluetooth',
+    bluetoothTitle: 'Bluetooth',
     bluetoothDesc: 'Okutulduğunda bluetooth cihazınızı otomatik olarak eşler.',
-    eraseTitle: '🗑️ Veri Sil',
+    eraseTitle: 'Veri Sil',
     eraseDesc: 'Kartın içindeki mevcut tüm NDEF verilerini temizler.',
 
     eraseHeaderTitle: 'Veri Silme',
@@ -120,8 +114,8 @@ const translations = {
     placeholderEmail: 'ornek@mail.com',
 
     eraseInfo: 'Kartın içeriğini kalıcı olarak silmek için telefonu karta yaklaştırıp aşağıdaki butona basın.',
-    copyStep1Info: 'Adım 1: Kopyalamak istediğiniz veriyi içeren kartı telefonunuza yaklaştırın ve aşağıdaki butona basın. Veri okunarak hafızaya alınacaktır.',
-    copyStep2Info: 'Adım 2: Veri başarıyla hafızaya alındı! Şimdi verinin yazılacağı yeni kartı telefonunuza yaklaştırın ve aşağıdaki butona basarak veriyi yapıştırın.',
+    copyStep1Info: 'Adım 1: Kopyalamak istediğiniz veriyi içeren kartı telefonunuza yaklaştırın ve aşağıdaki butona basın.',
+    copyStep2Info: 'Adım 2: Veri hafızaya alındı! Şimdi verinin yazılacağı kartı yaklaştırın ve yapıştır butonuna basın.',
 
     errorTitle: 'Hata',
     urlEmptyError: 'Link alanı boş bırakılamaz!',
@@ -129,15 +123,15 @@ const translations = {
     macInvalidError: 'Geçerli bir MAC adresi girin (örn: 00:11:22:33:44:55)',
     writeGenericError: 'Kartı erken çekmiş olabilirsin veya bu kart desteklenmiyor.',
     noDataError: 'Bu kartta kopyalanabilecek bir veri (NDEF) bulunamadı veya kart boş.',
-    copyReadError: 'Kart okunamadı veya erken çektiniz. Kartın NDEF formatlı olduğundan emin olun.',
-    encodeError: 'Kopyalanan veri yazılabilir formata dönüştürülemedi. Lütfen tekrar kopyalamayı deneyin.',
+    copyReadError: 'Kart okunamadı veya erken çektiniz. NDEF formatlı olduğundan emin olun.',
+    encodeError: 'Kopyalanan veri yazılabilir formata dönüştürülemedi. Lütfen tekrar deneyin.',
     copyWriteError: 'Yazma başarısız. Kartı erken çekmiş olabilirsin veya kart kilitli olabilir.',
 
     successTitle: 'Başarılı!',
     eraseSuccessMsg: 'Kart başarıyla temizlendi.',
     writeSuccessMsg: 'Veri karta başarıyla yazıldı.',
     copySavedTitle: 'Hafızaya Alındı!',
-    copySavedMsg: 'Veri kopyalandı. Şimdi verinin yazılacağı (yapıştırılacağı) kartı yaklaştırın.',
+    copySavedMsg: 'Veri kopyalandı. Şimdi verinin yazılacağı kartı yaklaştırın.',
     copyWriteSuccessMsg: 'Hafızadaki veri yeni karta başarıyla yazıldı.',
 
     eraseModeStatus: 'Silme modunda, kartı yaklaştırın...',
@@ -155,11 +149,22 @@ const translations = {
 
     navRead: 'Oku',
     navWrite: 'Yaz',
+    navSettings: 'Ayarlar',
+
+    settingsLanguageSection: 'Dil',
+    settingsThemeSection: 'Tema',
+    langTurkish: 'Türkçe',
+    langEnglish: 'İngilizce',
+    themeSystem: 'Sistem',
+    themeLight: 'Açık',
+    themeDark: 'Koyu',
+    settingsThemeNote: 'Sistem seçildiğinde cihazınızın tema ayarı kullanılır.',
   },
 
   en: {
     readTabTitle: 'NFC Read',
     writeTabTitle: 'NFC Write',
+    settingsTabTitle: 'Settings',
     statusLabel: 'STATUS',
 
     waitingForScan: 'Waiting for scan...',
@@ -171,15 +176,15 @@ const translations = {
     readButton: 'Scan Card',
 
     writeOptionsPrompt: 'Select the type of data you want to write.',
-    copyTitle: '📋 Copy',
-    copyDesc: 'Reads data from one card and copies it identically to another card.',
-    websiteTitle: '🌐 Website',
+    copyTitle: 'Copy',
+    copyDesc: 'Reads data from one card and copies it identically to another.',
+    websiteTitle: 'Website',
     websiteDesc: 'Automatically opens the website when scanned.',
-    contactTitle: '👤 Contact Card',
+    contactTitle: 'Contact Card',
     contactDesc: 'Saves the contact to the address book when scanned.',
-    bluetoothTitle: '🎧 Bluetooth',
+    bluetoothTitle: 'Bluetooth',
     bluetoothDesc: 'Automatically pairs your bluetooth device when scanned.',
-    eraseTitle: '🗑️ Erase Data',
+    eraseTitle: 'Erase Data',
     eraseDesc: 'Clears all existing NDEF data currently on the card.',
 
     eraseHeaderTitle: 'Erase Data',
@@ -200,8 +205,8 @@ const translations = {
     placeholderEmail: 'example@mail.com',
 
     eraseInfo: 'Bring the phone close to the card and press the button below to permanently erase its content.',
-    copyStep1Info: 'Step 1: Bring the card containing the data you want to copy close to your phone and press the button below. The data will be read and stored in memory.',
-    copyStep2Info: 'Step 2: The data was stored successfully! Now bring the new card you want to write to close to your phone and press the button below to paste the data.',
+    copyStep1Info: 'Step 1: Bring the source card close to your phone and press the button below. The data will be read and stored in memory.',
+    copyStep2Info: 'Step 2: Data stored! Now bring the target card close to your phone and press the paste button.',
 
     errorTitle: 'Error',
     urlEmptyError: 'The link field cannot be left empty!',
@@ -209,15 +214,15 @@ const translations = {
     macInvalidError: 'Enter a valid MAC address (e.g. 00:11:22:33:44:55)',
     writeGenericError: 'You may have removed the card too soon, or this card is not supported.',
     noDataError: 'No copyable data (NDEF) was found on this card, or the card is empty.',
-    copyReadError: 'The card could not be read or was removed too soon. Make sure the card is NDEF formatted.',
-    encodeError: 'The copied data could not be converted to a writable format. Please try copying again.',
+    copyReadError: 'The card could not be read or was removed too soon. Make sure it is NDEF formatted.',
+    encodeError: 'The copied data could not be converted to a writable format. Please try again.',
     copyWriteError: 'Writing failed. You may have removed the card too soon, or it might be locked.',
 
     successTitle: 'Success!',
     eraseSuccessMsg: 'The card was cleared successfully.',
     writeSuccessMsg: 'The data was written to the card successfully.',
     copySavedTitle: 'Saved to Memory!',
-    copySavedMsg: 'The data was copied. Now bring the card you want to write (paste) it to close to your phone.',
+    copySavedMsg: 'Data copied. Now bring the card you want to write it to close to your phone.',
     copyWriteSuccessMsg: 'The data in memory was written to the new card successfully.',
 
     eraseModeStatus: 'Erase mode, bring the card closer...',
@@ -235,137 +240,141 @@ const translations = {
 
     navRead: 'Read',
     navWrite: 'Write',
+    navSettings: 'Settings',
+
+    settingsLanguageSection: 'Language',
+    settingsThemeSection: 'Theme',
+    langTurkish: 'Turkish',
+    langEnglish: 'English',
+    themeSystem: 'System',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+    settingsThemeNote: 'When System is selected, your device theme preference is used.',
   },
 };
 
 // =================================================================================
-// ANA BİLEŞEN
+// ANA BILESEN
 // =================================================================================
 export default function App() {
-  // --- TEMA: telefonun sistem ayarına göre açık/koyu palet seçimi ---
-  const colorScheme = useColorScheme();
-  const colors = colorScheme === 'dark' ? darkColors : lightColors;
-  // colors değişmediği sürece StyleSheet'i tekrar tekrar oluşturmuyoruz.
+  // --- TEMA ---
+  // useColorScheme sistem temasını okur. themeOverride null ise sistem kullanılır,
+  // 'light'/'dark' seçilmişse o değer öncelik kazanır.
+  const systemColorScheme = useColorScheme();
+  const [themeOverride, setThemeOverride] = useState(null);
+  const effectiveScheme = themeOverride ?? systemColorScheme;
+  const colors = effectiveScheme === 'dark' ? darkColors : lightColors;
   const styles = useMemo(() => getStyles(colors), [colors]);
 
-  // --- DİL: aktif dil state'i ve metin okuma yardımcı fonksiyonu ---
-  const [language, setLanguage] = useState('tr');
+  // --- DIL ---
+  // Varsayılan dil İngilizce. t() aktif dile göre çeviriyi döndürür.
+  const [language, setLanguage] = useState('en');
   const t = (key, ...args) => {
     const entry = translations[language][key];
     return typeof entry === 'function' ? entry(...args) : entry;
   };
-  const toggleLanguage = () => setLanguage((prev) => (prev === 'tr' ? 'en' : 'tr'));
 
-  // --- NFC OKUMA / YAZMA AKIŞINA AİT TEMEL STATE'LER ---
+  // --- STATUS STATE'I ---
+  // statusKey: çeviri anahtarını tutar — dil değişince otomatik güncellenir.
+  // statusExtra: UID gibi çeviri gerektirmeyen ham değerleri tutar; varsa öncelik alır.
+  const [statusKey, setStatusKey] = useState('waitingForScan');
+  const [statusExtra, setStatusExtra] = useState(null);
+  const statusText = statusExtra ?? t(statusKey);
+
+  // --- NFC VE FORM STATE'LERI ---
   const [loading, setLoading] = useState(false);
-  const [cardId, setCardId] = useState(translations.tr.waitingForScan);
-  const [writeMode, setWriteMode] = useState('NONE'); // NONE | WEBSITE | CONTACT | BLUETOOTH | ERASE | COPY
+  const [writeMode, setWriteMode] = useState('NONE');
   const [url, setUrl] = useState('https://google.com');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [macAddress, setMacAddress] = useState('');
 
-  // --- ALT MENÜ (BOTTOM NAV) STATE'İ ---
-  const [activeTab, setActiveTab] = useState('READ'); // READ | WRITE
+  // --- ALT MENU STATE'I ---
+  const [activeTab, setActiveTab] = useState('READ');
 
-  // --- KART KOPYALAMA AKIŞINA AİT STATE'LER ---
-  const [copyStep, setCopyStep] = useState(1); // 1: kaynağı oku, 2: hedefe yaz
+  // --- KOPYALAMA AKISI STATE'LERI ---
+  const [copyStep, setCopyStep] = useState(1);
   const [copiedRecords, setCopiedRecords] = useState(null);
 
+  const resetStatus = () => { setStatusKey('waitingForScan'); setStatusExtra(null); };
+
   // ===============================================================================
-  // NFC İŞLEMLERİ
+  // NFC ISLEMLERI
   // ===============================================================================
 
-  // Tek bir kartı okuyup UID'sini ekrana basan en temel okuma fonksiyonu.
+  // Kartı okur ve UID'yi ekrana basar.
   async function startNfcScan() {
     try {
       setLoading(true);
-      setCardId(t('readingMode'));
+      setStatusKey('readingMode');
+      setStatusExtra(null);
       await NfcManager.requestTechnology([NfcTech.NfcA]);
       const tag = await NfcManager.getTag();
-      setCardId(tag.id);
+      setStatusExtra(tag.id);
       Alert.alert(t('cardCapturedTitle'), t('cardCapturedMsg', tag.id));
     } catch (ex) {
       console.warn(ex);
-      setCardId(t('readCancelled'));
+      setStatusKey('readCancelled');
+      setStatusExtra(null);
     } finally {
       NfcManager.cancelTechnologyRequest();
       setLoading(false);
     }
   }
 
-  // writeMode değerine göre karta NDEF verisi yazar veya kartı temizler.
+  // writeMode'a göre karta NDEF verisi yazar veya kartı temizler.
   async function writeNfcData() {
     let bytes = null;
-
     try {
       setLoading(true);
-      setCardId(writeMode === 'ERASE' ? t('eraseModeStatus') : t('writeModeStatus'));
+      setStatusExtra(null);
+      setStatusKey(writeMode === 'ERASE' ? 'eraseModeStatus' : 'writeModeStatus');
 
       if (writeMode === 'WEBSITE') {
-        if (!url) {
-          Alert.alert(t('errorTitle'), t('urlEmptyError'));
-          setLoading(false);
-          return;
-        }
+        if (!url) { Alert.alert(t('errorTitle'), t('urlEmptyError')); setLoading(false); return; }
         await NfcManager.requestTechnology([NfcTech.Ndef]);
         bytes = Ndef.encodeMessage([Ndef.uriRecord(url)]);
 
       } else if (writeMode === 'CONTACT') {
-        if (!name || !phone) {
-          Alert.alert(t('errorTitle'), t('contactRequiredError'));
-          setLoading(false);
-          return;
-        }
+        if (!name || !phone) { Alert.alert(t('errorTitle'), t('contactRequiredError')); setLoading(false); return; }
         const vCardData = `BEGIN:VCARD\nVERSION:3.0\nN:;${name};;;\nFN:${name}\nTEL;CELL:${phone}\nEMAIL:${email}\nEND:VCARD`;
         await NfcManager.requestTechnology([NfcTech.Ndef]);
-        bytes = Ndef.encodeMessage([
-          Ndef.mimeMediaRecord('text/vcard', vCardData),
-        ]);
+        bytes = Ndef.encodeMessage([Ndef.mimeMediaRecord('text/vcard', vCardData)]);
 
       } else if (writeMode === 'BLUETOOTH') {
-        if (!macAddress || !macAddress.includes(':')) {
-          Alert.alert(t('errorTitle'), t('macInvalidError'));
-          setLoading(false);
-          return;
-        }
+        if (!macAddress || !macAddress.includes(':')) { Alert.alert(t('errorTitle'), t('macInvalidError')); setLoading(false); return; }
         await NfcManager.requestTechnology([NfcTech.Ndef]);
-
         const macBytes = macAddress.split(':').reverse().map((hex) => parseInt(hex, 16));
-        const payload = [0x08, 0x00, ...macBytes];
-
-        bytes = Ndef.encodeMessage([
-          Ndef.mimeMediaRecord('application/vnd.bluetooth.ep.oob', payload),
-        ]);
+        bytes = Ndef.encodeMessage([Ndef.mimeMediaRecord('application/vnd.bluetooth.ep.oob', [0x08, 0x00, ...macBytes])]);
 
       } else if (writeMode === 'ERASE') {
         await NfcManager.requestTechnology([NfcTech.Ndef]);
-        // Boş bir NDEF mesajı yazarak kartı pratikte sıfırlamış oluyoruz.
         bytes = [0xd0, 0x00, 0x00];
       }
 
       if (bytes !== null) {
         await NfcManager.ndefHandler.writeNdefMessage(bytes);
         Alert.alert(t('successTitle'), writeMode === 'ERASE' ? t('eraseSuccessMsg') : t('writeSuccessMsg'));
-        setCardId(writeMode === 'ERASE' ? t('eraseSuccessStatus') : t('writeSuccessStatus'));
+        setStatusKey(writeMode === 'ERASE' ? 'eraseSuccessStatus' : 'writeSuccessStatus');
         setWriteMode('NONE');
       }
     } catch (ex) {
-      console.warn('NFC İşlem Hatası:', ex);
+      console.warn('NFC Hata:', ex);
       Alert.alert(t('errorTitle'), t('writeGenericError'));
-      setCardId(writeMode === 'ERASE' ? t('eraseFailStatus') : t('writeFailStatus'));
+      setStatusKey(writeMode === 'ERASE' ? 'eraseFailStatus' : 'writeFailStatus');
     } finally {
       NfcManager.cancelTechnologyRequest();
       setLoading(false);
     }
   }
 
-  // Kopyalama akışının 1. adımı: kaynak karttaki NDEF verisini okuyup hafızaya alır.
+  // Kopyalama Adım 1: kaynak karttaki NDEF verisini okuyup hafızaya alır.
   async function handleCopyStep1() {
     try {
       setLoading(true);
-      setCardId(t('copyStep1ReadingStatus'));
+      setStatusExtra(null);
+      setStatusKey('copyStep1ReadingStatus');
       await NfcManager.requestTechnology([NfcTech.Ndef]);
       const tag = await NfcManager.getTag();
 
@@ -373,43 +382,42 @@ export default function App() {
         setCopiedRecords(tag.ndefMessage);
         Alert.alert(t('copySavedTitle'), t('copySavedMsg'));
         setCopyStep(2);
-        setCardId(t('copyDataWaitingStatus'));
+        setStatusKey('copyDataWaitingStatus');
       } else {
         Alert.alert(t('errorTitle'), t('noDataError'));
-        setCardId(t('noDataStatus'));
+        setStatusKey('noDataStatus');
       }
     } catch (ex) {
-      console.warn('Kopyalama (Okuma) Hatası:', ex);
+      console.warn('Kopyalama Okuma Hata:', ex);
       Alert.alert(t('errorTitle'), t('copyReadError'));
-      setCardId(t('copyReadFailStatus'));
+      setStatusKey('copyReadFailStatus');
     } finally {
       NfcManager.cancelTechnologyRequest();
       setLoading(false);
     }
   }
 
-  // Kopyalama akışının 2. adımı: hafızadaki veriyi hedef karta yazar.
+  // Kopyalama Adım 2: hafızadaki veriyi hedef karta yazar.
   async function handleCopyStep2() {
     try {
       setLoading(true);
-      setCardId(t('copyStep2WritingStatus'));
+      setStatusExtra(null);
+      setStatusKey('copyStep2WritingStatus');
       await NfcManager.requestTechnology([NfcTech.Ndef]);
 
       if (copiedRecords) {
         let bytes = null;
         try {
-          // tag.ndefMessage Uint8Array dönebilir, Ndef.encodeMessage ise saf Array
-          // bekler; bu yüzden her alanı normal diziye çeviriyoruz.
+          // tag.ndefMessage Uint8Array dönebilir; Ndef.encodeMessage saf Array bekler.
           const formattedRecords = copiedRecords.map((record) => ({
             tnf: record.tnf,
             type: record.type ? Array.from(record.type) : [],
             id: record.id ? Array.from(record.id) : [],
             payload: record.payload ? Array.from(record.payload) : [],
           }));
-
           bytes = Ndef.encodeMessage(formattedRecords);
         } catch (e) {
-          console.warn('Veri Encode Hatası:', e);
+          console.warn('Encode Hata:', e);
           Alert.alert(t('errorTitle'), t('encodeError'));
           setLoading(false);
           NfcManager.cancelTechnologyRequest();
@@ -418,17 +426,15 @@ export default function App() {
 
         await NfcManager.ndefHandler.writeNdefMessage(bytes);
         Alert.alert(t('successTitle'), t('copyWriteSuccessMsg'));
-        setCardId(t('copyCompleteStatus'));
-
-        // İşlem bitince hafızayı sıfırlayıp menüye dönüyoruz.
+        setStatusKey('copyCompleteStatus');
         setCopiedRecords(null);
         setCopyStep(1);
         setWriteMode('NONE');
       }
     } catch (ex) {
-      console.warn('Kopyalama (Yazma) Hatası:', ex);
+      console.warn('Kopyalama Yazma Hata:', ex);
       Alert.alert(t('errorTitle'), t('copyWriteError'));
-      setCardId(t('writeFailStatus'));
+      setStatusKey('writeFailStatus');
     } finally {
       NfcManager.cancelTechnologyRequest();
       setLoading(false);
@@ -438,19 +444,18 @@ export default function App() {
   // ===============================================================================
   // EKRAN (RENDER) YARDIMCILARI
   // ===============================================================================
-  // Her ekranı ayrı bir fonksiyona bölerek ana return bloğunu sade tutuyoruz.
 
-  // Sayfa başlığı ile birlikte sağ üstte dil değiştirme butonunu gösteren ortak başlık.
+  // Her ekranda görünen ortak başlık. Sağda Settings butonu bulunur.
   const renderHeader = (title) => (
     <View style={styles.header}>
       <Text style={styles.headerTitle}>{title}</Text>
-      <TouchableOpacity style={styles.langToggle} onPress={toggleLanguage}>
-        <Text style={styles.langToggleText}>{language === 'tr' ? 'EN' : 'TR'}</Text>
+      <TouchableOpacity style={styles.settingsButton} onPress={() => setActiveTab('SETTINGS')}>
+        <Text style={styles.settingsButtonIcon}>⚙️</Text>
       </TouchableOpacity>
     </View>
   );
 
-  // "Oku" sekmesi: tek dokunuşla NFC taraması başlatan basit ekran.
+  // "Oku" sekmesi.
   const renderReadTab = () => (
     <View style={styles.tabContainer}>
       {renderHeader(t('readTabTitle'))}
@@ -459,77 +464,49 @@ export default function App() {
           <Text style={{ fontSize: 64 }}>📡</Text>
         </View>
         <Text style={styles.descriptionText}>{t('scanPrompt')}</Text>
-
         <TouchableOpacity style={styles.primaryButton} onPress={startNfcScan} disabled={loading}>
           {loading ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={styles.primaryButtonText}>{t('readButton')}</Text>}
         </TouchableOpacity>
-
         <View style={styles.statusCard}>
           <Text style={styles.statusLabel}>{t('statusLabel')}</Text>
-          <Text style={styles.statusValue}>{cardId}</Text>
+          <Text style={styles.statusValue}>{statusText}</Text>
         </View>
       </View>
     </View>
   );
 
-  // "Yaz" sekmesinin ana menüsü: yazılabilecek veri tiplerinin listesi.
-  const renderWriteOptions = () => (
-    <View style={styles.tabContainer}>
-      {renderHeader(t('writeTabTitle'))}
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.descriptionText}>{t('writeOptionsPrompt')}</Text>
+  // "Yaz" sekmesinin ana seçenek menüsü.
+  const renderWriteOptions = () => {
+    const options = [
+      { mode: 'COPY',      emoji: '📋', titleKey: 'copyTitle',      descKey: 'copyDesc',      onPress: () => { setWriteMode('COPY'); setCopyStep(1); setCopiedRecords(null); } },
+      { mode: 'WEBSITE',   emoji: '🌐', titleKey: 'websiteTitle',   descKey: 'websiteDesc',   onPress: () => setWriteMode('WEBSITE') },
+      { mode: 'CONTACT',   emoji: '👤', titleKey: 'contactTitle',   descKey: 'contactDesc',   onPress: () => setWriteMode('CONTACT') },
+      { mode: 'BLUETOOTH', emoji: '🎧', titleKey: 'bluetoothTitle', descKey: 'bluetoothDesc', onPress: () => setWriteMode('BLUETOOTH') },
+      { mode: 'ERASE',     emoji: '🗑️', titleKey: 'eraseTitle',     descKey: 'eraseDesc',     onPress: () => setWriteMode('ERASE') },
+    ];
 
-        <TouchableOpacity
-          style={styles.optionCard}
-          onPress={() => {
-            setWriteMode('COPY');
-            setCopyStep(1);
-            setCopiedRecords(null);
-          }}
-        >
-          <View style={styles.optionTextContainer}>
-            <Text style={styles.optionTitle}>{t('copyTitle')}</Text>
-            <Text style={styles.optionDesc}>{t('copyDesc')}</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
+    return (
+      <View style={styles.tabContainer}>
+        {renderHeader(t('writeTabTitle'))}
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <Text style={styles.descriptionText}>{t('writeOptionsPrompt')}</Text>
+          {options.map(({ mode, emoji, titleKey, descKey, onPress }) => (
+            <TouchableOpacity key={mode} style={styles.optionCard} onPress={onPress}>
+              <View style={styles.optionTextContainer}>
+                <Text style={[styles.optionTitle, mode === 'ERASE' && { color: colors.error }]}>
+                  {emoji} {t(titleKey)}
+                </Text>
+                <Text style={styles.optionDesc}>{t(descKey)}</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
 
-        <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('WEBSITE')}>
-          <View style={styles.optionTextContainer}>
-            <Text style={styles.optionTitle}>{t('websiteTitle')}</Text>
-            <Text style={styles.optionDesc}>{t('websiteDesc')}</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('CONTACT')}>
-          <View style={styles.optionTextContainer}>
-            <Text style={styles.optionTitle}>{t('contactTitle')}</Text>
-            <Text style={styles.optionDesc}>{t('contactDesc')}</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('BLUETOOTH')}>
-          <View style={styles.optionTextContainer}>
-            <Text style={styles.optionTitle}>{t('bluetoothTitle')}</Text>
-            <Text style={styles.optionDesc}>{t('bluetoothDesc')}</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.optionCard} onPress={() => setWriteMode('ERASE')}>
-          <View style={styles.optionTextContainer}>
-            <Text style={[styles.optionTitle, { color: colors.error }]}>{t('eraseTitle')}</Text>
-            <Text style={styles.optionDesc}>{t('eraseDesc')}</Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
-  );
-
-  // Seçilen veri tipine göre formu ve "yaz / kopyala / sil" butonunu gösteren ekran.
+  // Seçilen veri tipine göre formu ve aksiyon butonunu gösteren ekran.
   const renderWriteForm = () => {
     let onPressAction = writeNfcData;
     let buttonText = writeMode === 'ERASE' ? t('eraseButton') : t('writeButton');
@@ -541,7 +518,7 @@ export default function App() {
 
     const headerTitle =
       writeMode === 'ERASE' ? t('eraseHeaderTitle') :
-      writeMode === 'COPY' ? t('copyHeaderTitle') :
+      writeMode === 'COPY'  ? t('copyHeaderTitle')  :
       t('dataEntryHeaderTitle');
 
     return (
@@ -551,20 +528,13 @@ export default function App() {
 
           <View style={styles.statusCard}>
             <Text style={styles.statusLabel}>{t('statusLabel')}</Text>
-            <Text style={styles.statusValue}>{cardId}</Text>
+            <Text style={styles.statusValue}>{statusText}</Text>
           </View>
 
           {writeMode === 'WEBSITE' && (
             <View>
               <Text style={styles.inputLabel}>{t('websiteLabel')}</Text>
-              <TextInput
-                style={styles.input}
-                onChangeText={setUrl}
-                value={url}
-                placeholder="https://example.com"
-                placeholderTextColor={colors.onSurfaceVariant}
-                autoCapitalize="none"
-              />
+              <TextInput style={styles.input} onChangeText={setUrl} value={url} placeholder="https://example.com" placeholderTextColor={colors.onSurfaceVariant} autoCapitalize="none" />
             </View>
           )}
 
@@ -573,38 +543,16 @@ export default function App() {
               <Text style={styles.inputLabel}>{t('nameLabel')}</Text>
               <TextInput style={styles.input} onChangeText={setName} value={name} placeholder="John Doe" placeholderTextColor={colors.onSurfaceVariant} />
               <Text style={styles.inputLabel}>{t('phoneLabel')}</Text>
-              <TextInput
-                style={styles.input}
-                onChangeText={setPhone}
-                value={phone}
-                placeholder="+90 555 555 5555"
-                keyboardType="phone-pad"
-                placeholderTextColor={colors.onSurfaceVariant}
-              />
+              <TextInput style={styles.input} onChangeText={setPhone} value={phone} placeholder="+1 555 555 5555" keyboardType="phone-pad" placeholderTextColor={colors.onSurfaceVariant} />
               <Text style={styles.inputLabel}>{t('emailLabel')}</Text>
-              <TextInput
-                style={styles.input}
-                onChangeText={setEmail}
-                value={email}
-                placeholder={t('placeholderEmail')}
-                keyboardType="email-address"
-                placeholderTextColor={colors.onSurfaceVariant}
-                autoCapitalize="none"
-              />
+              <TextInput style={styles.input} onChangeText={setEmail} value={email} placeholder={t('placeholderEmail')} keyboardType="email-address" placeholderTextColor={colors.onSurfaceVariant} autoCapitalize="none" />
             </View>
           )}
 
           {writeMode === 'BLUETOOTH' && (
             <View>
               <Text style={styles.inputLabel}>{t('macLabel')}</Text>
-              <TextInput
-                style={styles.input}
-                onChangeText={setMacAddress}
-                value={macAddress}
-                placeholder="A1:B2:C3:D4:E5:F6"
-                placeholderTextColor={colors.onSurfaceVariant}
-                autoCapitalize="characters"
-              />
+              <TextInput style={styles.input} onChangeText={setMacAddress} value={macAddress} placeholder="A1:B2:C3:D4:E5:F6" placeholderTextColor={colors.onSurfaceVariant} autoCapitalize="characters" />
             </View>
           )}
 
@@ -627,20 +575,12 @@ export default function App() {
             onPress={onPressAction}
             disabled={loading}
           >
-            {loading ? (
-              <ActivityIndicator color={colors.onPrimary} />
-            ) : (
-              <Text style={styles.primaryButtonText}>{buttonText}</Text>
-            )}
+            {loading ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={styles.primaryButtonText}>{buttonText}</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.ghostButton}
-            onPress={() => {
-              setWriteMode('NONE');
-              setCopiedRecords(null);
-              setCopyStep(1);
-            }}
+            onPress={() => { setWriteMode('NONE'); setCopiedRecords(null); setCopyStep(1); }}
             disabled={loading}
           >
             <Text style={styles.ghostButtonText}>{t('cancelButton')}</Text>
@@ -651,40 +591,80 @@ export default function App() {
     );
   };
 
+  // Settings ekranı: dil ve tema seçimi.
+  const renderSettings = () => {
+    const OptionButton = ({ label, selected, onPress }) => (
+      <TouchableOpacity
+        style={[styles.settingsOption, selected && styles.settingsOptionSelected]}
+        onPress={onPress}
+      >
+        <Text style={[styles.settingsOptionText, selected && styles.settingsOptionTextSelected]}>
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+
+    return (
+      <View style={styles.tabContainer}>
+        {renderHeader(t('settingsTabTitle'))}
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+
+          <View style={styles.settingsSection}>
+            <Text style={styles.settingsSectionTitle}>{t('settingsLanguageSection')}</Text>
+            <View style={styles.settingsRow}>
+              <OptionButton label={t('langEnglish')} selected={language === 'en'} onPress={() => setLanguage('en')} />
+              <OptionButton label={t('langTurkish')} selected={language === 'tr'} onPress={() => setLanguage('tr')} />
+            </View>
+          </View>
+
+          <View style={styles.settingsSection}>
+            <Text style={styles.settingsSectionTitle}>{t('settingsThemeSection')}</Text>
+            <View style={styles.settingsRow}>
+              <OptionButton label={t('themeSystem')} selected={themeOverride === null}    onPress={() => setThemeOverride(null)} />
+              <OptionButton label={t('themeLight')}  selected={themeOverride === 'light'} onPress={() => setThemeOverride('light')} />
+              <OptionButton label={t('themeDark')}   selected={themeOverride === 'dark'}  onPress={() => setThemeOverride('dark')} />
+            </View>
+            <Text style={styles.settingsNote}>{t('settingsThemeNote')}</Text>
+          </View>
+
+        </ScrollView>
+      </View>
+    );
+  };
+
   // ===============================================================================
-  // ANA YERLEŞİM (LAYOUT)
+  // ANA YERLESIM (LAYOUT)
   // ===============================================================================
-  // Ekranın iskeleti: üstte aktif sekmenin içeriği, altta sabit gezinme çubuğu.
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle={effectiveScheme === 'dark' ? 'light-content' : 'dark-content'} />
       <View style={styles.container}>
 
         <View style={styles.contentArea}>
-          {activeTab === 'READ'
-            ? renderReadTab()
-            : (writeMode === 'NONE' ? renderWriteOptions() : renderWriteForm())}
+          {activeTab === 'READ'     && renderReadTab()}
+          {activeTab === 'WRITE'    && (writeMode === 'NONE' ? renderWriteOptions() : renderWriteForm())}
+          {activeTab === 'SETTINGS' && renderSettings()}
         </View>
 
         <View style={styles.bottomNav}>
-          <TouchableOpacity
-            style={[styles.navItem, activeTab === 'READ' && styles.navItemActive]}
-            onPress={() => {
-              setActiveTab('READ');
-              setWriteMode('NONE');
-            }}
-          >
-            <Text style={[styles.navIcon, activeTab === 'READ' && styles.navIconActive]}>📡</Text>
-            <Text style={[styles.navText, activeTab === 'READ' && styles.navTextActive]}>{t('navRead')}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.navItem, activeTab === 'WRITE' && styles.navItemActive]}
-            onPress={() => setActiveTab('WRITE')}
-          >
-            <Text style={[styles.navIcon, activeTab === 'WRITE' && styles.navIconActive]}>✍️</Text>
-            <Text style={[styles.navText, activeTab === 'WRITE' && styles.navTextActive]}>{t('navWrite')}</Text>
-          </TouchableOpacity>
+          {[
+            { tab: 'READ',     icon: '📡', labelKey: 'navRead' },
+            { tab: 'WRITE',    icon: '✍️',  labelKey: 'navWrite' },
+            { tab: 'SETTINGS', icon: '⚙️',  labelKey: 'navSettings' },
+          ].map(({ tab, icon, labelKey }) => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.navItem, activeTab === tab && styles.navItemActive]}
+              onPress={() => {
+                setActiveTab(tab);
+                if (tab !== 'WRITE') setWriteMode('NONE');
+                resetStatus();
+              }}
+            >
+              <Text style={[styles.navIcon, activeTab === tab && styles.navIconActive]}>{icon}</Text>
+              <Text style={[styles.navText, activeTab === tab && styles.navTextActive]}>{t(labelKey)}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
       </View>
@@ -693,11 +673,10 @@ export default function App() {
 }
 
 // =================================================================================
-// STİLLER
+// STILLER
 // =================================================================================
-// StyleSheet artık sabit bir COLORS objesine değil, parametre olarak gelen aktif
-// temaya (colors) bağlı. Bileşen içinde useMemo ile sadece tema değiştiğinde
-// yeniden hesaplanır.
+// getStyles(colors) ile tema değiştiğinde StyleSheet yeniden oluşturulur.
+// Bileşen içinde useMemo kullanarak gereksiz yeniden hesaplamalar önlenir.
 function getStyles(colors) {
   return StyleSheet.create({
     safeArea: {
@@ -721,14 +700,8 @@ function getStyles(colors) {
       borderBottomColor: colors.outlineVariant,
     },
     headerTitle: { fontSize: 22, fontWeight: '600', color: colors.primary },
-    langToggle: {
-      borderWidth: 1,
-      borderColor: colors.outlineVariant,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-    },
-    langToggleText: { fontSize: 12, fontWeight: '700', color: colors.primary },
+    settingsButton: { padding: 6 },
+    settingsButtonIcon: { fontSize: 22 },
 
     readContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
     nfcIconPlaceholder: {
@@ -759,7 +732,6 @@ function getStyles(colors) {
       marginTop: 8,
     },
     primaryButtonText: { color: colors.onPrimary, fontSize: 18, fontWeight: '600' },
-
     ghostButton: { width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
     ghostButtonText: { color: colors.onSurfaceVariant, fontSize: 16, fontWeight: '600' },
 
@@ -771,7 +743,6 @@ function getStyles(colors) {
       borderRadius: 12,
       padding: 16,
       marginTop: 32,
-      flexDirection: 'column',
     },
     statusLabel: { fontSize: 12, fontWeight: '500', color: colors.onSurfaceVariant, marginBottom: 4 },
     statusValue: { fontSize: 14, fontWeight: '600', color: colors.onSurface },
@@ -787,7 +758,7 @@ function getStyles(colors) {
       marginBottom: 16,
     },
     optionTextContainer: { flex: 1 },
-    optionTitle: { fontSize: 18, fontWeight: '600', color: colors.onSurface, marginBottom: 4 },
+    optionTitle: { fontSize: 17, fontWeight: '600', color: colors.onSurface, marginBottom: 4 },
     optionDesc: { fontSize: 14, color: colors.onSurfaceVariant, lineHeight: 20 },
     chevron: { fontSize: 24, color: colors.primary, paddingLeft: 16 },
 
@@ -802,6 +773,39 @@ function getStyles(colors) {
       color: colors.onSurface,
     },
 
+    settingsSection: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.outlineVariant,
+      borderRadius: 16,
+      padding: 20,
+      marginBottom: 16,
+    },
+    settingsSectionTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.onSurfaceVariant,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      marginBottom: 14,
+    },
+    settingsRow: { flexDirection: 'row', gap: 10 },
+    settingsOption: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.outlineVariant,
+      alignItems: 'center',
+    },
+    settingsOptionSelected: {
+      backgroundColor: colors.surfaceVariant,
+      borderColor: colors.primary,
+    },
+    settingsOptionText: { fontSize: 14, fontWeight: '500', color: colors.onSurfaceVariant },
+    settingsOptionTextSelected: { color: colors.primary, fontWeight: '700' },
+    settingsNote: { fontSize: 12, color: colors.onSurfaceVariant, marginTop: 12, lineHeight: 18 },
+
     bottomNav: {
       flexDirection: 'row',
       backgroundColor: colors.surfaceContainerLowest,
@@ -810,11 +814,11 @@ function getStyles(colors) {
       paddingVertical: 8,
       paddingBottom: 16,
     },
-    navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginHorizontal: 16, borderRadius: 12 },
+    navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginHorizontal: 8, borderRadius: 12 },
     navItemActive: { backgroundColor: colors.surfaceVariant },
-    navIcon: { fontSize: 24, opacity: 0.6 },
+    navIcon: { fontSize: 22, opacity: 0.6 },
     navIconActive: { opacity: 1 },
-    navText: { fontSize: 12, fontWeight: '500', color: colors.onSurfaceVariant, marginTop: 4 },
+    navText: { fontSize: 11, fontWeight: '500', color: colors.onSurfaceVariant, marginTop: 4 },
     navTextActive: { color: colors.primary, fontWeight: '700' },
   });
 }
