@@ -11,7 +11,7 @@
 // Bir şey ararken bu sıralamayı takip edebilirsin.
 // =================================================================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -25,6 +25,7 @@ import {
   Platform,
   StatusBar,
   useColorScheme,
+  useWindowDimensions,
 } from 'react-native';
 import NfcManager, { NfcTech, Ndef } from 'react-native-nfc-manager';
 
@@ -282,9 +283,36 @@ export default function App() {
   const resetStatus = () => { setStatusKey('waitingForScan'); setStatusExtra(null); };
 
   // ===============================================================================
+  // KAYDIRMA (SWIPE) İÇİN GEREKLİ EKLENTİLER
+  // ===============================================================================
+  const { width } = useWindowDimensions();
+  const scrollViewRef = useRef(null);
+  const TABS = ['READ', 'WRITE', 'SETTINGS'];
+
+  const handleScrollEnd = (e) => {
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / width);
+    const newTab = TABS[index];
+
+    if (activeTab !== newTab) {
+      setActiveTab(newTab);
+      if (newTab !== 'WRITE') setWriteMode('NONE');
+      resetStatus();
+    }
+  };
+
+  const handleTabPress = (tab) => {
+    const index = TABS.indexOf(tab);
+    scrollViewRef.current?.scrollTo({ x: index * width, animated: true });
+
+    setActiveTab(tab);
+    if (tab !== 'WRITE') setWriteMode('NONE');
+    resetStatus();
+  };
+
+  // ===============================================================================
   // NFC ISLEMLERI
   // ===============================================================================
-
   async function startNfcScan() {
     try {
       setLoading(true);
@@ -376,17 +404,6 @@ export default function App() {
     }
   }
 
-  // -----------------------------------------------------------------------
-  // DÜZELTME: handleCopyStep2
-  // Eski kod, copiedRecords'tan plain JS objeleri ({ tnf, type, id, payload })
-  // oluşturup doğrudan Ndef.encodeMessage'a veriyordu. Kütüphane içeride bu
-  // objelerin üzerinde kendi metodlarını çağırdığı için "undefined is not a
-  // function" hatası fırlatıyordu.
-  //
-  // Yeni kod, her record'un TNF + type değerine bakarak kütüphanenin kendi
-  // builder fonksiyonlarını (uriRecord / textRecord / mimeMediaRecord) çağırır
-  // ve bu sayede encodeMessage'ın beklediği tam yapıyı üretir.
-  // -----------------------------------------------------------------------
   async function handleCopyStep2() {
     try {
       setLoading(true);
@@ -403,25 +420,18 @@ export default function App() {
             const idArr      = record.id      ? Array.from(record.id)      : [];
             const typeStr    = String.fromCharCode(...typeArr);
 
-            // TNF_WELL_KNOWN (1) + RTD_URI ("U") → Web sitesi / URL
             if (record.tnf === 1 && typeStr === 'U') {
               const uri = Ndef.uri.decodePayload(payloadArr);
               return Ndef.uriRecord(uri);
             }
-
-            // TNF_WELL_KNOWN (1) + RTD_TEXT ("T") → Düz metin
             if (record.tnf === 1 && typeStr === 'T') {
               const text = Ndef.text.decodePayload(payloadArr);
               return Ndef.textRecord(text);
             }
-
-            // TNF_MIME_MEDIA (2) → vCard ve Bluetooth dahil tüm MIME tipleri
             if (record.tnf === 2) {
               return Ndef.mimeMediaRecord(typeStr, payloadArr);
             }
 
-            // Diğer / tanınmayan tipler için fallback
-            // (TNF_ABSOLUTE_URI=3, TNF_EXTERNAL_TYPE=4 vb.)
             return {
               tnf:     record.tnf,
               type:    typeArr,
@@ -459,13 +469,9 @@ export default function App() {
   // ===============================================================================
   // EKRAN (RENDER) YARDIMCILARI
   // ===============================================================================
-
   const renderHeader = (title) => (
     <View style={styles.header}>
       <Text style={styles.headerTitle}>{title}</Text>
-      <TouchableOpacity style={styles.settingsButton} onPress={() => setActiveTab('SETTINGS')}>
-        <Text style={styles.settingsButtonIcon}>⚙️</Text>
-      </TouchableOpacity>
     </View>
   );
 
@@ -651,9 +657,24 @@ export default function App() {
       <View style={styles.container}>
 
         <View style={styles.contentArea}>
-          {activeTab === 'READ'     && renderReadTab()}
-          {activeTab === 'WRITE'    && (writeMode === 'NONE' ? renderWriteOptions() : renderWriteForm())}
-          {activeTab === 'SETTINGS' && renderSettings()}
+          <ScrollView
+            ref={scrollViewRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleScrollEnd}
+            bounces={false}
+          >
+            <View style={{ width, flex: 1 }}>
+              {renderReadTab()}
+            </View>
+            <View style={{ width, flex: 1 }}>
+              {writeMode === 'NONE' ? renderWriteOptions() : renderWriteForm()}
+            </View>
+            <View style={{ width, flex: 1 }}>
+              {renderSettings()}
+            </View>
+          </ScrollView>
         </View>
 
         <View style={styles.bottomNav}>
@@ -665,11 +686,7 @@ export default function App() {
             <TouchableOpacity
               key={tab}
               style={[styles.navItem, activeTab === tab && styles.navItemActive]}
-              onPress={() => {
-                setActiveTab(tab);
-                if (tab !== 'WRITE') setWriteMode('NONE');
-                resetStatus();
-              }}
+              onPress={() => handleTabPress(tab)}
             >
               <Text style={[styles.navIcon, activeTab === tab && styles.navIconActive]}>{icon}</Text>
               <Text style={[styles.navText, activeTab === tab && styles.navTextActive]}>{t(labelKey)}</Text>
